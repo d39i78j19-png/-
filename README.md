@@ -9,19 +9,26 @@
 までを一本の画面で回せるツールです。各ステップの入出力は JSON 契約として固定されているので、
 既存の採用管理システムやスプレッドシートにそのまま渡せます。
 
-## 使う人向け（デスクトップアプリ）
+## ダウンロード
+
+**最新版 v0.1.0**: https://github.com/d39i78j19-png/-/releases/tag/v0.1.0
 
 インストーラをダウンロードして起動するだけで使えます。Node.js やターミナルの知識は不要です。
 
-| OS | 配布物 | 起動方法 |
+| OS | ダウンロード | 起動方法 |
 | --- | --- | --- |
-| Windows | `新卒採用ペルソナ設計スタジオ-x.y.z-setup.exe` | 実行してインストール → スタートメニューから起動 |
-| macOS | `新卒採用ペルソナ設計スタジオ-x.y.z-<arch>.dmg` | 開いて Applications にドラッグ → 初回のみ**右クリック→開く** |
-| Linux | `persona-studio-x.y.z-x86_64.AppImage` | `chmod +x` してダブルクリック |
+| **Windows** | [persona-studio-0.1.0-windows-setup.exe](https://github.com/d39i78j19-png/-/releases/download/v0.1.0/persona-studio-0.1.0-windows-setup.exe) (143MB) | 実行してインストール → スタートメニューから起動 |
+| **macOS**（M1/M2/M3 以降） | [persona-studio-0.1.0-mac-arm64.dmg](https://github.com/d39i78j19-png/-/releases/download/v0.1.0/persona-studio-0.1.0-mac-arm64.dmg) (186MB) | 開いて Applications にドラッグ → 初回のみ**右クリック→開く** |
+| **macOS**（Intel） | [persona-studio-0.1.0-mac-x64.dmg](https://github.com/d39i78j19-png/-/releases/download/v0.1.0/persona-studio-0.1.0-mac-x64.dmg) (188MB) | 同上 |
+| **Linux** | [persona-studio-0.1.0-linux-x86_64.AppImage](https://github.com/d39i78j19-png/-/releases/download/v0.1.0/persona-studio-0.1.0-linux-x86_64.AppImage) (245MB) | `chmod +x` してダブルクリック |
+
+> Mac をお使いの方へ: メニューの  → 「このMacについて」でチップ名を確認してください。
+> 「Apple M〜」と書かれていれば arm64、「Intel」と書かれていれば x64 です。
 
 配布物は GitHub Actions が3 OS 分をビルドします（`.github/workflows/build-desktop-app.yml`）。
-`v1.0.0` のようなタグを push すると Release に添付され、手動実行なら Actions の
-Artifacts からダウンロードできます。
+次のバージョンを出すときは、Actions からこのワークフローを手動実行して
+`release_tag` に `v0.2.0` のように入力すると、ビルドから Release 作成まで自動で行われます。
+`v*` のタグを push しても同じことが起こります。
 
 > **署名について**: コード署名を行っていないため、macOS は初回に「開発元を確認できません」と出ます。
 > 右クリック→開く で一度許可すれば以降は通常起動できます。Windows も SmartScreen の
