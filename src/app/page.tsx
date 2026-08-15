@@ -146,6 +146,30 @@ function toCandidate(form: CandidateForm): Candidate {
 
 const STORAGE_KEY = "persona-studio:project:v1";
 
+/** これ以上の長さが貼られたら掲載文とみなして自動で読み取る。 */
+const AUTO_EXTRACT_MIN = 40;
+
+const FIELD_LABELS: [keyof CompanyInfo, string][] = [
+  ["name", "会社名"],
+  ["description", "事業内容"],
+  ["mission", "ミッション"],
+  ["values", "バリュー"],
+  ["must_have_skills", "必須スキル"],
+  ["nice_to_have", "歓迎スキル"],
+  ["locations", "勤務地"],
+  ["hiring_type", "採用区分"],
+  ["target_grad_years", "対象卒業年度"],
+];
+
+/** 読み取りで実際に埋まった項目のラベルを返す。 */
+function filledFieldLabels(info: CompanyInfo): string[] {
+  return FIELD_LABELS.filter(([key]) => {
+    const value = info[key];
+    if (Array.isArray(value)) return value.length > 0;
+    return typeof value === "string" && value.trim().length > 0;
+  }).map(([, label]) => label);
+}
+
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
@@ -175,6 +199,7 @@ export default function Page() {
   const [sourceText, setSourceText] = useState("");
   const [extractMeta, setExtractMeta] = useState<EngineMeta | null>(null);
   const [extractMissing, setExtractMissing] = useState<string[]>([]);
+  const [extractFilled, setExtractFilled] = useState<string[]>([]);
   const [extractLoading, setExtractLoading] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
 
@@ -264,23 +289,43 @@ export default function Page() {
   }, [buildProject]);
 
   /** 貼り付けた掲載文を企業情報フォームに展開する。既存の入力は上書きする。 */
-  async function runExtract() {
+  async function runExtract(text = sourceText) {
+    const source = text.trim();
+    if (!source) return;
+
     setExtractLoading(true);
     setExtractError(null);
+    setExtractFilled([]);
     try {
       const result = await postJson<{
         company_info: CompanyInfo;
         missing_fields: string[];
         _meta: EngineMeta;
-      }>("/api/extract", { source_text: sourceText });
+      }>("/api/extract", { source_text: source });
       setCompany(fromCompanyInfo(result.company_info));
       setExtractMissing(result.missing_fields);
       setExtractMeta(result._meta);
+      // 「反映されたのか分からない」を防ぐため、埋まった項目名を明示する
+      setExtractFilled(filledFieldLabels(result.company_info));
     } catch (error) {
       setExtractError(error instanceof Error ? error.message : String(error));
     } finally {
       setExtractLoading(false);
     }
+  }
+
+  /**
+   * 掲載文が貼られたら、ボタンを押さなくてもその場で読み取る。
+   * どちらの入力欄に貼られても同じ挙動にする（貼り先を間違えても迷わせない）。
+   */
+  function handlePasteSource(
+    event: React.ClipboardEvent<HTMLTextAreaElement>,
+  ): void {
+    const text = event.clipboardData.getData("text");
+    if (text.trim().length < AUTO_EXTRACT_MIN) return;
+    event.preventDefault();
+    setSourceText(text);
+    void runExtract(text);
   }
 
   async function generatePersonas() {
@@ -436,8 +481,8 @@ export default function Page() {
           }}
         >
           <Field
-            label="採用サイト・マイナビの掲載文から読み取る"
-            hint="貼り付けて読み取ると、下の各項目が自動で埋まります"
+            label="① まずここに掲載文を貼り付けてください"
+            hint="貼り付けた瞬間に読み取って、下の各項目が自動で埋まります"
           >
             <textarea
               rows={6}
@@ -446,6 +491,7 @@ export default function Page() {
                 "「事業内容」「求める人材」「勤務地」などの見出しが残っているほど正確に読み取れます。"
               }
               value={sourceText}
+              onPaste={handlePasteSource}
               onChange={(e) => setSourceText(e.target.value)}
             />
           </Field>
@@ -461,7 +507,7 @@ export default function Page() {
             <button
               type="button"
               className="btn btn-primary"
-              onClick={runExtract}
+              onClick={() => void runExtract()}
               disabled={extractLoading || sourceText.trim().length === 0}
             >
               {extractLoading ? "読み取り中…" : "掲載文を読み取ってフォームに反映"}
@@ -488,6 +534,14 @@ export default function Page() {
             </span>
           </div>
 
+          {extractFilled.length > 0 ? (
+            <div style={{ marginTop: 10 }}>
+              <Notice>
+                <strong>{extractFilled.length}項目に反映しました</strong>（
+                {extractFilled.join("・")}）。下の欄を確認してください。
+              </Notice>
+            </div>
+          ) : null}
           {extractError ? (
             <div style={{ marginTop: 10 }}>
               <Notice tone="bad">{extractError}</Notice>
@@ -534,11 +588,12 @@ export default function Page() {
 
         <Field
           label="事業内容・求める人物像"
-          hint="必須。採用サイトやマイナビの本文を貼り付け"
+          hint="必須。上の読み取り結果が入ります。ここに直接貼り付けても読み取ります"
         >
           <textarea
             rows={4}
             value={company.description}
+            onPaste={handlePasteSource}
             onChange={(e) =>
               setCompany({ ...company, description: e.target.value })
             }
