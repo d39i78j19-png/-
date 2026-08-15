@@ -216,6 +216,57 @@ export function requirePersonaCount(value: unknown): number {
   return Math.min(n, 8);
 }
 
+/** 掲載文の下限・上限。上限は 1 回のリクエストのトークン量を抑えるための足切り。 */
+export const SOURCE_TEXT_MIN = 40;
+export const SOURCE_TEXT_MAX = 30000;
+
+export interface SourceText {
+  text: string;
+  truncated: boolean;
+}
+
+/** 貼り付けられた掲載文を検証する。長すぎる場合は切って続行する。 */
+export function requireSourceText(value: unknown): SourceText {
+  const text = asString(value);
+  if (!text) {
+    throw new ValidationError("source_text は必須です。掲載文を貼り付けてください。");
+  }
+  if (countChars(text) < SOURCE_TEXT_MIN) {
+    throw new ValidationError(
+      `掲載文が短すぎます（${SOURCE_TEXT_MIN} 文字以上を貼り付けてください）。`,
+    );
+  }
+  if (text.length > SOURCE_TEXT_MAX) {
+    return { text: text.slice(0, SOURCE_TEXT_MAX), truncated: true };
+  }
+  return { text, truncated: false };
+}
+
+/**
+ * 読み取り結果を company_info の形に整える。
+ * Structured Outputs は「空文字を返さない」ことまでは保証しないため、
+ * 長さの上限・配列の件数はここで機械的に揃える。
+ */
+export function sanitizeExtractedCompany(raw: unknown): CompanyInfo {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const items = (value: unknown, cap: number, maxLen: number): string[] =>
+    asStringArray(value)
+      .map((v) => truncatePlain(v, maxLen))
+      .slice(0, cap);
+
+  return {
+    name: truncatePlain(asString(r.name), 60),
+    description: truncateChars(asString(r.description), 400),
+    mission: truncatePlain(asString(r.mission), 60) || undefined,
+    values: items(r.values, 8, 20),
+    must_have_skills: items(r.must_have_skills, 8, 24),
+    nice_to_have: items(r.nice_to_have, 8, 24),
+    locations: items(r.locations, 6, 30),
+    hiring_type: truncatePlain(asString(r.hiring_type), 30) || undefined,
+    target_grad_years: items(r.target_grad_years, 4, 8),
+  };
+}
+
 export function requirePersona(value: unknown): Persona {
   const v = (value ?? {}) as Record<string, unknown>;
   if (!asString(v.id) || !asString(v.label)) {

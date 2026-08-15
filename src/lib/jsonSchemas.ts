@@ -150,6 +150,45 @@ export const EXTRAS_JUDGEMENT_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+/**
+ * 掲載文 → company_info の読み取り用スキーマ。
+ * 掲載文に書かれていない項目は空文字 / 空配列で返させ、missing_fields に理由を残させる。
+ */
+export const COMPANY_EXTRACT_SCHEMA = {
+  type: "object",
+  properties: {
+    company_info: {
+      type: "object",
+      properties: {
+        name: str,
+        description: str,
+        mission: str,
+        values: strArray,
+        must_have_skills: strArray,
+        nice_to_have: strArray,
+        locations: strArray,
+        hiring_type: str,
+        target_grad_years: strArray,
+      },
+      required: [
+        "name",
+        "description",
+        "mission",
+        "values",
+        "must_have_skills",
+        "nice_to_have",
+        "locations",
+        "hiring_type",
+        "target_grad_years",
+      ],
+      additionalProperties: false,
+    },
+    missing_fields: strArray,
+  },
+  required: ["company_info", "missing_fields"],
+  additionalProperties: false,
+} as const;
+
 export const EMAIL_OUTPUT_SCHEMA = {
   type: "object",
   properties: {

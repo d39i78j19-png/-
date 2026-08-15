@@ -172,6 +172,12 @@ export default function Page() {
   const [personaLoading, setPersonaLoading] = useState(false);
   const [personaError, setPersonaError] = useState<string | null>(null);
 
+  const [sourceText, setSourceText] = useState("");
+  const [extractMeta, setExtractMeta] = useState<EngineMeta | null>(null);
+  const [extractMissing, setExtractMissing] = useState<string[]>([]);
+  const [extractLoading, setExtractLoading] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
+
   const [candidate, setCandidate] = useState<CandidateForm>(SAMPLE_CANDIDATE);
   const [match, setMatch] = useState<Match | null>(null);
   const [trace, setTrace] = useState<ScoreTrace | null>(null);
@@ -256,6 +262,26 @@ export default function Page() {
     }, 600);
     return () => clearTimeout(timer);
   }, [buildProject]);
+
+  /** 貼り付けた掲載文を企業情報フォームに展開する。既存の入力は上書きする。 */
+  async function runExtract() {
+    setExtractLoading(true);
+    setExtractError(null);
+    try {
+      const result = await postJson<{
+        company_info: CompanyInfo;
+        missing_fields: string[];
+        _meta: EngineMeta;
+      }>("/api/extract", { source_text: sourceText });
+      setCompany(fromCompanyInfo(result.company_info));
+      setExtractMissing(result.missing_fields);
+      setExtractMeta(result._meta);
+    } catch (error) {
+      setExtractError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setExtractLoading(false);
+    }
+  }
 
   async function generatePersonas() {
     setPersonaLoading(true);
@@ -400,6 +426,93 @@ export default function Page() {
           </button>
         }
       >
+        <div
+          style={{
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            background: "var(--surface-2)",
+            padding: "12px 14px",
+            marginBottom: 16,
+          }}
+        >
+          <Field
+            label="採用サイト・マイナビの掲載文から読み取る"
+            hint="貼り付けて読み取ると、下の各項目が自動で埋まります"
+          >
+            <textarea
+              rows={6}
+              placeholder={
+                "採用サイトやマイナビの掲載ページを全選択してコピーし、そのまま貼り付けてください。\n" +
+                "「事業内容」「求める人材」「勤務地」などの見出しが残っているほど正確に読み取れます。"
+              }
+              value={sourceText}
+              onChange={(e) => setSourceText(e.target.value)}
+            />
+          </Field>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={runExtract}
+              disabled={extractLoading || sourceText.trim().length === 0}
+            >
+              {extractLoading ? "読み取り中…" : "掲載文を読み取ってフォームに反映"}
+            </button>
+            {sourceText.trim().length > 0 ? (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setSourceText("");
+                  setExtractMeta(null);
+                  setExtractMissing([]);
+                  setExtractError(null);
+                }}
+              >
+                貼り付けをクリア
+              </button>
+            ) : null}
+            {extractMeta ? (
+              <EngineBadge engine={extractMeta.engine} model={extractMeta.model} />
+            ) : null}
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+              読み取り結果は下の欄で手直しできます
+            </span>
+          </div>
+
+          {extractError ? (
+            <div style={{ marginTop: 10 }}>
+              <Notice tone="bad">{extractError}</Notice>
+            </div>
+          ) : null}
+          {extractMissing.length > 0 ? (
+            <div style={{ marginTop: 10 }}>
+              <Notice tone="warn">
+                掲載文から読み取れなかった項目があります（
+                {extractMissing.join("・")}）。下の欄に直接入力してください。
+              </Notice>
+            </div>
+          ) : null}
+          {extractMeta?.warnings?.length ? (
+            <div style={{ marginTop: 10 }}>
+              <Notice tone="warn">{extractMeta.warnings.join(" / ")}</Notice>
+            </div>
+          ) : null}
+          {extractMeta?.note ? (
+            <div style={{ marginTop: 10 }}>
+              <Notice>{extractMeta.note}</Notice>
+            </div>
+          ) : null}
+        </div>
+
         <Grid min={260}>
           <Field label="会社名" hint="必須">
             <input
