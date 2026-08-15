@@ -14,4 +14,6 @@ npm-debug.log*
 
 # Electron のビルド成果物
 dist/
+# ブラウザ完結デモの出力（npm run web:demo で生成）
+dist-web/
 build/*.png.bak

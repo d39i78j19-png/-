@@ -8,6 +8,19 @@ import {
 } from "@/lib/project";
 
 /**
+ * 埋め込み先がファイル保存を横取りするための差し込み口。
+ * 通常（ブラウザ・Electron）は未設定で、a[download] による保存が使われる。
+ * 保存 API が別に用意された環境（Artifact ビューアなど）だけがこれを設定する。
+ */
+export type FileSaver = (filename: string, blob: Blob) => Promise<void>;
+
+declare global {
+  interface Window {
+    __personaStudioSaveFile?: FileSaver;
+  }
+}
+
+/**
  * 設計データ一式（企業情報・ペルソナ・採点結果・メール）の保存と読み込み。
  * 保存はブラウザのダウンロード機能をそのまま使うので、Electron でも
  * OS の「ダウンロード」フォルダに .json が落ちる。
@@ -29,23 +42,31 @@ export function ProjectBar({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  function download() {
+  async function download() {
     setError(null);
     try {
       const project = buildProject();
       const blob = new Blob([JSON.stringify(project, null, 2)], {
         type: "application/json",
       });
-      const url = URL.createObjectURL(blob);
       const stamp = project.saved_at.slice(0, 10);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${safeFileName(project.company_info.name)}_ペルソナ設計_${stamp}.json`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      // Blob URL は解放しないとメモリに残り続ける
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const filename = `${safeFileName(project.company_info.name)}_ペルソナ設計_${stamp}.json`;
+
+      const saver = window.__personaStudioSaveFile;
+      if (saver) {
+        await saver(filename, blob);
+      } else {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        // Blob URL は解放しないとメモリに残り続ける
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
       setMessage("設計データを書き出しました。");
       setTimeout(() => setMessage(null), 2600);
     } catch (e) {
@@ -90,7 +111,7 @@ export function ProjectBar({
         <button type="button" className="btn" onClick={() => fileInput.current?.click()}>
           JSONを読み込む
         </button>
-        <button type="button" className="btn btn-primary" onClick={download}>
+        <button type="button" className="btn btn-primary" onClick={() => void download()}>
           JSONで書き出す
         </button>
       </div>

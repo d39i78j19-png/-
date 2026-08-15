@@ -16,7 +16,8 @@
     "app:dir": "npm run build && npm run prepare:standalone && electron-builder --dir",
     "app:linux": "npm run build && npm run prepare:standalone && electron-builder --linux --publish never",
     "app:win": "npm run build && npm run prepare:standalone && electron-builder --win --publish never",
-    "app:mac": "npm run build && npm run prepare:standalone && electron-builder --mac --publish never"
+    "app:mac": "npm run build && npm run prepare:standalone && electron-builder --mac --publish never",
+    "web:demo": "npm run build && node scripts/build-web-demo.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
@@ -26,11 +27,12 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
-    "electron": "^43.4.0",
-    "electron-builder": "^26.15.3",
     "@types/node": "^22.15.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.0"
   }
