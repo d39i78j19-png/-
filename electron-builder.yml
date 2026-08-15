@@ -1,0 +1,65 @@
+appId: jp.co.example.persona-studio
+productName: 新卒採用ペルソナ設計スタジオ
+copyright: © 2026
+
+directories:
+  output: dist
+  buildResources: build
+
+# Electron 側に入れるのは main プロセスだけ。
+# Next.js のサーバー本体は extraResources として resources/app に置く。
+files:
+  - electron/**/*
+  - package.json
+  - "!**/*.map"
+
+# .next/standalone をまるごと resources/app に置く。
+# node_modules は from に直接指定しないと electron-builder の既定の除外規則で
+# 落とされてしまうため、別エントリとして明示的にコピーする
+# （落ちると server.js が起動時に「Cannot find module 'next'」で失敗する）。
+extraResources:
+  - from: .next/standalone
+    to: app
+    filter:
+      - "**/*"
+  - from: .next/standalone/node_modules
+    to: app/node_modules
+    filter:
+      - "**/*"
+
+# asar に固めるとサーバーの spawn 経路が複雑になるので main のみ対象にする
+asar: true
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: 新卒採用ペルソナ設計スタジオ-${version}-setup.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 新卒採用ペルソナ設計スタジオ
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  category: public.app-category.business
+  artifactName: 新卒採用ペルソナ設計スタジオ-${version}-${arch}.${ext}
+  # 署名なしで配布する場合、受け取り側は初回のみ右クリック→開く が必要
+  identity: null
+
+dmg:
+  title: 新卒採用ペルソナ設計スタジオ
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  category: Office
+  syncDesktopName: true
+  artifactName: persona-studio-${version}-${arch}.${ext}

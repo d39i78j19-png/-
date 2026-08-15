@@ -1,9 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CandidateTable } from "@/components/CandidateTable";
 import { EmailCard } from "@/components/EmailCard";
 import { PersonaCard } from "@/components/PersonaCard";
+import { ProjectBar } from "@/components/ProjectBar";
 import { FinalScore, ScoreBars } from "@/components/ScoreBars";
+import { SettingsPanel } from "@/components/SettingsPanel";
 import {
   EngineBadge,
   Field,
@@ -13,6 +16,12 @@ import {
   Section,
 } from "@/components/ui";
 import type { ScoreTrace } from "@/lib/matchEngine";
+import {
+  buildProjectFile,
+  parseProjectFile,
+  type ProjectFile,
+  type ScoredCandidate,
+} from "@/lib/project";
 import type {
   Candidate,
   CompanyInfo,
@@ -106,6 +115,20 @@ function toCompanyInfo(form: CompanyForm): CompanyInfo {
   };
 }
 
+function fromCompanyInfo(info: CompanyInfo): CompanyForm {
+  return {
+    name: info.name ?? "",
+    description: info.description ?? "",
+    mission: info.mission ?? "",
+    values: (info.values ?? []).join(", "),
+    must_have_skills: (info.must_have_skills ?? []).join(", "),
+    nice_to_have: (info.nice_to_have ?? []).join(", "),
+    locations: (info.locations ?? []).join(", "),
+    hiring_type: info.hiring_type ?? "",
+    target_grad_years: (info.target_grad_years ?? []).join(", "),
+  };
+}
+
 function toCandidate(form: CandidateForm): Candidate {
   return {
     id: form.id.trim(),
@@ -120,6 +143,8 @@ function toCandidate(form: CandidateForm): Candidate {
     remote_ok: form.remote_ok,
   };
 }
+
+const STORAGE_KEY = "persona-studio:project:v1";
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
@@ -160,10 +185,77 @@ export default function Page() {
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
 
+  const [scored, setScored] = useState<ScoredCandidate[]>([]);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  // 復元が終わるまで自動保存を走らせない（初期値で上書きしてしまうため）
+  const hydrated = useRef(false);
+
   const selectedPersona = useMemo(
     () => personas.find((p) => p.id === selectedId) ?? null,
     [personas, selectedId],
   );
+
+  const applyProject = useCallback((project: ProjectFile) => {
+    setCompany(fromCompanyInfo(project.company_info));
+    setPersonaCount(project.persona_count);
+    setPersonas(project.personas);
+    setSelectedId(
+      project.selected_persona_id ?? project.personas[0]?.id ?? null,
+    );
+    setPosition(project.position_info);
+    setScored(project.scored_candidates);
+    setEmails(project.emails);
+    setMatch(null);
+    setTrace(null);
+  }, []);
+
+  const buildProject = useCallback(
+    (): ProjectFile =>
+      buildProjectFile({
+        company_info: toCompanyInfo(company),
+        persona_count: personaCount,
+        personas,
+        selected_persona_id: selectedId,
+        position_info: position,
+        scored_candidates: scored,
+        emails,
+        now: new Date().toISOString(),
+      }),
+    [company, personaCount, personas, selectedId, position, scored, emails],
+  );
+
+  // 起動時に前回の作業を復元する
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (raw) applyProject(parseProjectFile(JSON.parse(raw)));
+    } catch {
+      // 壊れた保存データは黙って捨てる（作業開始を妨げない）
+      window.localStorage.removeItem(STORAGE_KEY);
+    } finally {
+      hydrated.current = true;
+    }
+  }, [applyProject]);
+
+  // 変更のたびに自動保存する（アプリを閉じても続きから再開できるように）
+  useEffect(() => {
+    if (!hydrated.current) return;
+    const timer = setTimeout(() => {
+      try {
+        const project = buildProject();
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+        setSavedAt(
+          new Date(project.saved_at).toLocaleTimeString("ja-JP", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        );
+      } catch {
+        // 容量超過などで保存できなくても操作は続けられるようにする
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [buildProject]);
 
   async function generatePersonas() {
     setPersonaLoading(true);
@@ -207,6 +299,26 @@ export default function Page() {
       setMatch(result.match);
       setTrace(result._trace);
       setMatchMeta(result._meta);
+
+      // 同じ候補者 × 同じペルソナの再採点は上書きする
+      const entry: ScoredCandidate = {
+        candidate: toCandidate(candidate),
+        match: result.match,
+        trace: result._trace,
+        persona_id: selectedPersona.id,
+        persona_label: selectedPersona.label,
+        scored_at: new Date().toISOString(),
+      };
+      setScored((prev) => [
+        ...prev.filter(
+          (r) =>
+            !(
+              r.candidate.id === entry.candidate.id &&
+              r.persona_id === entry.persona_id
+            ),
+        ),
+        entry,
+      ]);
     } catch (error) {
       setMatchError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -262,6 +374,16 @@ export default function Page() {
           各ステップの JSON はそのままコピーして他システムに渡せます。
         </p>
       </header>
+
+      <SettingsPanel />
+
+      <ProjectBar
+        buildProject={buildProject}
+        onImport={applyProject}
+        personaCount={personas.length}
+        scoredCount={scored.length}
+        savedAt={savedAt}
+      />
 
       {/* ---------- Step 1: 企業情報 → ペルソナ ---------- */}
       <Section
@@ -634,6 +756,18 @@ export default function Page() {
             <JsonBlock label="POST /api/match のレスポンス JSON" value={{ match }} />
           </div>
         ) : null}
+
+        <CandidateTable
+          rows={scored}
+          onRemove={(candidateId, personaId) =>
+            setScored((prev) =>
+              prev.filter(
+                (r) =>
+                  !(r.candidate.id === candidateId && r.persona_id === personaId),
+              ),
+            )
+          }
+        />
       </Section>
 
       {/* ---------- Step 3: スカウトメール ---------- */}

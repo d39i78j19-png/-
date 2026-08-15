@@ -2,11 +2,21 @@
   "name": "shinsotsu-persona-studio",
   "version": "0.1.0",
   "private": true,
+  "description": "新卒採用のペルソナ設計・候補者マッチ採点・スカウトメール作成をまとめて行うデスクトップアプリ",
+  "author": "採用企画チーム",
+  "desktopName": "persona-studio.desktop",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare:standalone": "node scripts/prepare-standalone.mjs",
+    "app:dev": "npm run build && npm run prepare:standalone && electron .",
+    "app:dir": "npm run build && npm run prepare:standalone && electron-builder --dir",
+    "app:linux": "npm run build && npm run prepare:standalone && electron-builder --linux",
+    "app:win": "npm run build && npm run prepare:standalone && electron-builder --win",
+    "app:mac": "npm run build && npm run prepare:standalone && electron-builder --mac"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
@@ -16,6 +26,8 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
     "@types/node": "^22.15.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",

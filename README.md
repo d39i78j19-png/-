@@ -9,16 +9,59 @@
 までを一本の画面で回せるツールです。各ステップの入出力は JSON 契約として固定されているので、
 既存の採用管理システムやスプレッドシートにそのまま渡せます。
 
-## 動かす
+## 使う人向け（デスクトップアプリ）
+
+インストーラをダウンロードして起動するだけで使えます。Node.js やターミナルの知識は不要です。
+
+| OS | 配布物 | 起動方法 |
+| --- | --- | --- |
+| Windows | `新卒採用ペルソナ設計スタジオ-x.y.z-setup.exe` | 実行してインストール → スタートメニューから起動 |
+| macOS | `新卒採用ペルソナ設計スタジオ-x.y.z-<arch>.dmg` | 開いて Applications にドラッグ → 初回のみ**右クリック→開く** |
+| Linux | `persona-studio-x.y.z-x86_64.AppImage` | `chmod +x` してダブルクリック |
+
+配布物は GitHub Actions が3 OS 分をビルドします（`.github/workflows/build-desktop-app.yml`）。
+`v1.0.0` のようなタグを push すると Release に添付され、手動実行なら Actions の
+Artifacts からダウンロードできます。
+
+> **署名について**: コード署名を行っていないため、macOS は初回に「開発元を確認できません」と出ます。
+> 右クリック→開く で一度許可すれば以降は通常起動できます。Windows も SmartScreen の
+> 警告が出る場合は「詳細情報」→「実行」を選んでください。社内配布で警告を消したい場合は
+> 署名証明書が必要です。
+
+### APIキーの登録
+
+アプリ上部の「Claude API キー」→**設定**から登録します。未登録でも全機能が
+同梱のルールベースエンジンで動作するので、まず触ってから決められます。
+
+キーはお使いの PC のユーザーデータ領域に、本人のみ読み書きできる権限（0600）で保存されます。
+暗号化はされないため、共用 PC では環境変数での運用を推奨します。アプリ内のボタンでいつでも削除できます。
+
+### 設計データの保存
+
+作業内容は自動保存され、次回起動時に復元されます。
+**「JSONで書き出す」**で企業情報・ペルソナ定義・採点済み候補者・スカウトメールを1ファイルに
+まとめてダウンロードできます。**「JSONを読み込む」**で復元・共有できます。
+
+## 開発する人向け
 
 ```bash
 npm install
-npm run dev      # http://localhost:3000
+npm run dev      # ブラウザ版 http://localhost:3000
+npm run app:dev  # デスクトップアプリとして起動
 ```
 
-`ANTHROPIC_API_KEY` は**任意**です。未設定でも全機能がルールベースエンジンで動作します
-（画面右上に「ルールベース」と表示されます）。設定すると、ペルソナ生成・スカウトメール作成・
-課外活動の文脈判断が Claude に切り替わります。
+配布物のビルド:
+
+```bash
+npm run app:linux   # AppImage
+npm run app:win     # Windows インストーラ（Windows 上で実行）
+npm run app:mac     # dmg（macOS 上で実行）
+```
+
+`.exe` と `.dmg` はそれぞれ Windows / macOS 上でしかビルドできません。1台で3 OS 分作りたい場合は
+GitHub Actions を使ってください。
+
+ブラウザ運用する場合、APIキーは環境変数で渡します（この場合アプリ画面からは変更できません）。
 
 ```bash
 cp .env.example .env.local   # ANTHROPIC_API_KEY を記入
@@ -90,8 +133,14 @@ Claude の Structured Outputs は「キーと型」を保証しますが、
 ## 構成
 
 ```
+electron/
+  main.js          Next サーバーを子プロセスで起動しウィンドウに表示する
+scripts/
+  prepare-standalone.mjs  standalone 出力に静的アセットを流し込む
 src/lib/
   schema.ts        型定義（JSON 契約と 1:1）
+  project.ts       設計データ一式（JSON）の形式と検証
+  keyStore.ts      APIキーの保存先と読み出し
   jsonSchemas.ts   Structured Outputs 用の JSON Schema
   prompts.ts       3エンジンのシステムプロンプト
   anthropic.ts     Claude 呼び出し（refusal 処理・フォールバック込み）

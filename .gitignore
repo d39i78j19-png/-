@@ -11,3 +11,7 @@ next-env.d.ts
 
 .DS_Store
 npm-debug.log*
+
+# Electron のビルド成果物
+dist/
+build/*.png.bak

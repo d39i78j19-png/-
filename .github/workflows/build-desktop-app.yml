@@ -1,0 +1,77 @@
+name: デスクトップアプリのビルド
+
+# Windows の .exe と macOS の .dmg は、それぞれの OS 上でしかビルドできない。
+# タグを打つか、手動実行すると 3 OS 分の配布物ができあがる。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows (.exe インストーラ)
+            command: npm run app:win
+          - os: macos-latest
+            label: macOS (.dmg / Intel + Apple Silicon)
+            command: npm run app:mac
+          - os: ubuntu-latest
+            label: Linux (AppImage)
+            command: npm run app:linux
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 依存をインストール
+        run: npm ci
+
+      - name: 型チェック
+        run: npm run typecheck
+
+      - name: ビルド
+        run: ${{ matrix.command }}
+        env:
+          # 署名は行わない。受け取り側の初回起動手順は README に記載。
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 配布物をアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: persona-studio-${{ runner.os }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.AppImage
+
+  # タグ push のときだけ、3 OS 分をまとめて Release に添付する
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Release を作成
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true

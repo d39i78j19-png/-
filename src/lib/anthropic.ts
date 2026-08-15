@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { getApiKey } from "./keyStore";
 
 /**
  * Claude 呼び出しの薄いラッパ。
@@ -9,13 +10,26 @@ export const MODEL = "claude-opus-5";
 
 /** API キーが無ければ全ルートはルールベースエンジンにフォールバックする。 */
 export function hasApiKey(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
+  return Boolean(getApiKey());
 }
 
-let cached: Anthropic | null = null;
+let cached: { key: string; instance: Anthropic } | null = null;
+
+/**
+ * キーは環境変数か設定画面のどちらからでも来る。設定画面で入れ替えられた場合に
+ * 古いクライアントを使い続けないよう、キー文字列が変わったら作り直す。
+ */
 function client(): Anthropic {
-  if (!cached) cached = new Anthropic();
-  return cached;
+  const key = getApiKey();
+  if (!key) {
+    throw new Error(
+      "API キーが設定されていません。設定画面から登録するか、環境変数 ANTHROPIC_API_KEY を設定してください。",
+    );
+  }
+  if (!cached || cached.key !== key) {
+    cached = { key, instance: new Anthropic({ apiKey: key }) };
+  }
+  return cached.instance;
 }
 
 /** Claude の安全性分類器がリクエストを断った場合に投げる。 */
