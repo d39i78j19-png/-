@@ -66,12 +66,22 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Release を作成
-        uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/**/*
-          generate_release_notes: true
+      - name: 添付するファイルを確認
+        run: find artifacts -type f -printf '%s\t%p\n' | sort -rn
+
+      # gh はランナーに標準搭載されているので、サードパーティ Action への
+      # 依存を増やさずに Release を作れる
+      - name: Release を作成して配布物を添付
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            $(find artifacts -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' \))

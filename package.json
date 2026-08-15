@@ -14,9 +14,9 @@
     "prepare:standalone": "node scripts/prepare-standalone.mjs",
     "app:dev": "npm run build && npm run prepare:standalone && electron .",
     "app:dir": "npm run build && npm run prepare:standalone && electron-builder --dir",
-    "app:linux": "npm run build && npm run prepare:standalone && electron-builder --linux",
-    "app:win": "npm run build && npm run prepare:standalone && electron-builder --win",
-    "app:mac": "npm run build && npm run prepare:standalone && electron-builder --mac"
+    "app:linux": "npm run build && npm run prepare:standalone && electron-builder --linux --publish never",
+    "app:win": "npm run build && npm run prepare:standalone && electron-builder --win --publish never",
+    "app:mac": "npm run build && npm run prepare:standalone && electron-builder --mac --publish never"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",

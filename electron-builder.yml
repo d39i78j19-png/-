@@ -34,7 +34,10 @@ win:
   target:
     - target: nsis
       arch: [x64]
-  artifactName: 新卒採用ペルソナ設計スタジオ-${version}-setup.${ext}
+  # ファイル名は ASCII に固定する。GitHub Release の添付ファイル名は
+  # 非 ASCII が変換されてしまい、ダウンロードURLが崩れるため。
+  # 画面上のアプリ名（productName）は日本語のままで問題ない。
+  artifactName: persona-studio-${version}-windows-setup.${ext}
 
 nsis:
   oneClick: false
@@ -49,7 +52,7 @@ mac:
     - target: dmg
       arch: [x64, arm64]
   category: public.app-category.business
-  artifactName: 新卒採用ペルソナ設計スタジオ-${version}-${arch}.${ext}
+  artifactName: persona-studio-${version}-mac-${arch}.${ext}
   # 署名なしで配布する場合、受け取り側は初回のみ右クリック→開く が必要
   identity: null
 
@@ -62,4 +65,4 @@ linux:
       arch: [x64]
   category: Office
   syncDesktopName: true
-  artifactName: persona-studio-${version}-${arch}.${ext}
+  artifactName: persona-studio-${version}-linux-${arch}.${ext}
