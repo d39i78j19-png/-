@@ -522,6 +522,7 @@ ol.qs li .why{font-size:12px;color:var(--ink-3);margin-top:3px}
             <label style="font-size:12px">ラベル帯%<input type="number" id="shLabel" value="16" min="0" max="40" style="width:60px;margin-left:4px"></label>
             <label style="font-size:12px">内側余白%<input type="number" id="shInset" value="3" min="0" max="20" style="width:60px;margin-left:4px"></label>
             <label style="font-size:12px">切り出しの縦位置%<input type="number" id="shFocus" value="35" min="0" max="100" step="5" style="width:64px;margin-left:4px"></label>
+            <label style="font-size:12px">横位置%<input type="number" id="shFocusX" value="50" min="0" max="100" step="5" style="width:64px;margin-left:4px" title="列が左右にずれているときに調整します"></label>
             <label style="font-size:12px">年齢<input type="number" id="shAge" value="22" min="15" max="70" style="width:60px;margin-left:4px"></label>
           </div>
           <div class="phbar noprint" style="gap:8px;align-items:center">
@@ -2942,16 +2943,23 @@ function cellData(img,sx,sy,sw,sh,maxW){
 }
 
 /* セル画像から、表示用の正方形を作る。focus は上下位置(0=上寄り 1=下寄り)。 */
-function squareFromCell(cellUrl, focus, size){
+/* focus  … 縦位置 0=上寄り 1=下寄り
+   focusX … 横位置 0=左寄り 1=右寄り
+   zoom   … 切り出す正方形の大きさ（1=セルの短辺いっぱい、小さいほど寄る）
+   セルが縦長だと横方向に余りが無いので、zoom を1未満にして初めて横に動かせる。 */
+function squareFromCell(cellUrl, focus, size, focusX, zoom){
   return new Promise(res=>{
     const im=new Image();
     im.onload=()=>{
-      const w=im.naturalWidth,h=im.naturalHeight,side=Math.min(w,h);
+      const w=im.naturalWidth,h=im.naturalHeight;
+      const z=Math.min(1,Math.max(0.4, zoom==null?1:zoom));
+      const side=Math.min(w,h)*z;
+      const fx=focusX==null?0.5:focusX, fy=focus==null?0.35:focus;
       /* 元より大きく描かない。引き伸ばしても情報は増えず、ぼやけたまま容量だけ増える。 */
-      const out=Math.min(size||448, side);
+      const out=Math.round(Math.min(size||448, side));
       const c=document.createElement("canvas"); c.width=c.height=out;
       const ctx=c.getContext("2d"); ctx.imageSmoothingQuality="high";
-      ctx.drawImage(im,(w-side)/2,(h-side)*(focus==null?0.35:focus),side,side,0,0,c.width,c.height);
+      ctx.drawImage(im,(w-side)*fx,(h-side)*fy,side,side,0,0,c.width,c.height);
       res(c.toDataURL("image/jpeg",0.85));
     };
     im.onerror=()=>res(null);
@@ -2964,15 +2972,21 @@ function squareFromCell(cellUrl, focus, size){
 async function hydratePool(){
   await Promise.all(photoPool.map(async ph=>{
     if(ph.cell && !ph.dataUrl){
-      ph.dataUrl = await squareFromCell(ph.cell, ph.focus, 448);
+      ph.dataUrl = await squareFromCell(ph.cell, ph.focus, 448, ph.focusX, ph.zoom);
     }
   }));
 }
 
-function squareData(img,sx,sy,sw,sh,size,focus){
-  const f=(focus==null?0.35:focus);
+/* シートから正方形を切る。focusX はセルの中心からのずらし量で、
+   0.5 が中央。セルが縦長でも、シート上では左右に画があるので
+   セルの枠を越えて寄せられる（列がわずかにずれているときの調整用）。 */
+function squareData(img,sx,sy,sw,sh,size,focus,focusX){
+  const f=(focus==null?0.35:focus), fx=(focusX==null?0.5:focusX);
   const side=Math.min(sw,sh);
-  const cx=sx+(sw-side)/2, cy=sy+(sh-side)*f;
+  let cx=sx+(sw-side)/2+(fx-0.5)*side;
+  let cy=sy+(sh-side)*f;
+  cx=Math.max(0,Math.min(cx,img.naturalWidth-side));
+  cy=Math.max(0,Math.min(cy,img.naturalHeight-side));
   const c=document.createElement("canvas"); c.width=c.height=size;
   const ctx=c.getContext("2d"); ctx.imageSmoothingQuality="high";
   ctx.drawImage(img,cx,cy,side,side,0,0,size,size);
@@ -3197,9 +3211,12 @@ function shDraw(){
   const ctx=cv.getContext("2d"); ctx.clearRect(0,0,cv.width,cv.height);
   const sx=cv.width/shImage.naturalWidth, sy=cv.height/shImage.naturalHeight;
   const focus=Math.min(100,Math.max(0,shNum("shFocus",35)))/100;
+  const focusX=Math.min(100,Math.max(0,shNum("shFocusX",50)))/100;
   for(const c of shCells()){
     const side=Math.min(c.w,c.h);
-    const x=(c.x+(c.w-side)/2)*sx, y=(c.y+(c.h-side)*focus)*sy;
+    const rawX=c.x+(c.w-side)/2+(focusX-0.5)*side;
+    const clampX=Math.max(0,Math.min(rawX,shImage.naturalWidth-side));
+    const x=clampX*sx, y=(c.y+(c.h-side)*focus)*sy;
     ctx.strokeStyle=c.gender==="female"?"rgba(163,74,147,.95)":"rgba(12,140,90,.95)";
     ctx.lineWidth=2; ctx.strokeRect(x,y,side*sx,side*sy);
   }
@@ -3216,6 +3233,7 @@ function shPreview(){
   if(!cells.length){ box.classList.add("hidden"); return; }
   box.classList.remove("hidden");
   const focus=Math.min(100,Math.max(0,shNum("shFocus",35)))/100;
+  const focusX=Math.min(100,Math.max(0,shNum("shFocusX",50)))/100;
 
   /* 全部出すと重いので、各パネルの先頭2枚だけを見本にする。
      どのパネルも同じ枠で切るので、これで十分ズレが分かる。 */
@@ -3227,7 +3245,7 @@ function shPreview(){
   }
   const sample=[...byPanel.values()].flat();
   host.innerHTML=sample.map(c=>{
-    const url=squareData(shImage,c.x,c.y,c.w,c.h,120,focus);
+    const url=squareData(shImage,c.x,c.y,c.w,c.h,120,focus,focusX);
     const seg=SEGMENTS.find(x=>x.key===shPanelSeg[c.pi]);
     return `<figure style="margin:0">
       <img src="${url}" alt="" style="display:block;width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--hair)">
@@ -3416,9 +3434,17 @@ function renderPhotoAdmin(){
         </label>
       </div>
       <div style="padding:7px 8px;display:flex;flex-direction:column;gap:5px">
-        ${p.cell?`<label style="font-size:10px;color:var(--ink-3)">切り出し位置
-          <input class="pf" type="range" min="0" max="100" step="5" value="${Math.round((p.focus==null?0.35:p.focus)*100)}" style="width:100%;margin-top:2px">
-        </label>`:`<span style="font-size:10px;color:var(--ink-3)">位置調整不可（古い形式）</span>`}
+        ${p.cell?`
+          <label style="font-size:10px;color:var(--ink-3)">縦位置
+            <input class="pf" type="range" min="0" max="100" step="5" value="${Math.round((p.focus==null?0.35:p.focus)*100)}" style="width:100%">
+          </label>
+          <label style="font-size:10px;color:${(p.zoom==null||p.zoom>=1)?"var(--ink-3)":"var(--s1)"}">横位置${(p.zoom==null||p.zoom>=1)?"（下の拡大を下げると動きます）":""}
+            <input class="pfx" type="range" min="0" max="100" step="5" value="${Math.round((p.focusX==null?0.5:p.focusX)*100)}" style="width:100%">
+          </label>
+          <label style="font-size:10px;color:var(--ink-3)">拡大（下げると顔に寄る）
+            <input class="pz" type="range" min="40" max="100" step="5" value="${Math.round((p.zoom==null?1:p.zoom)*100)}" style="width:100%">
+          </label>`
+        :`<span style="font-size:10px;color:var(--ink-3)">位置調整不可（古い形式）</span>`}
         <select class="ps" style="font-size:11px;padding:3px 5px;border-radius:6px">${segOpts(p)}</select>
         <select class="pg" style="font-size:11px;padding:3px 5px;border-radius:6px">
           <option value="unknown"${p.gender==="unknown"?" selected":""}>未設定</option>
@@ -3442,19 +3468,26 @@ function renderPhotoAdmin(){
     el.querySelector(".pg").onchange=save;
     el.querySelector(".pa").onchange=save;
 
-    /* 切り出し位置の変更。動かしている間はその場の <img> だけ差し替え、
-       離したときに保存する。毎回描き直すと重くて操作感が悪い。 */
-    const fr=el.querySelector(".pf");
+    /* 切り出しの調整（縦・横・拡大）。動かしている間はその場の <img> だけ
+       差し替え、離したときに保存する。毎回保存すると重くて操作感が悪い。
+       横に動かせるのは拡大を100%未満にしたときだけ（セルが縦長で、
+       等倍だと横方向に余りが無いため）。 */
+    const fr=el.querySelector(".pf"), fx=el.querySelector(".pfx"), fz=el.querySelector(".pz");
     if(fr){
       const img=el.querySelector("img");
       const apply=async commit=>{
         p.focus=Number(fr.value)/100;
-        const url=await squareFromCell(p.cell,p.focus,448);
+        p.focusX=Number(fx.value)/100;
+        p.zoom=Number(fz.value)/100;
+        const url=await squareFromCell(p.cell,p.focus,448,p.focusX,p.zoom);
         if(url){ p.dataUrl=url; img.src=url; }
         if(commit){ savePhotoPool(); refreshAssignedPhotos(); }
       };
-      fr.oninput=()=>apply(false);
-      fr.onchange=()=>apply(true);
+      fr.oninput=()=>apply(false); fr.onchange=()=>apply(true);
+      fx.oninput=()=>apply(false); fx.onchange=()=>apply(true);
+      fz.oninput=()=>apply(false);
+      /* 拡大を確定したときだけ描き直す。横位置が効くかどうかの案内が変わるため。 */
+      fz.onchange=()=>apply(true).then(renderPhotoAdmin);
     }
 
     el.querySelector(".pk").onchange=e=>{
@@ -3580,10 +3613,10 @@ function initPhotoAdmin(){
     shRefresh();
   };
 
-  ["shPCols","shPRows","shGRows","shGCols","shHead","shLabel","shInset","shFocus"].forEach(id=>{
+  ["shPCols","shPRows","shGRows","shGCols","shHead","shLabel","shInset","shFocus","shFocusX"].forEach(id=>{
     $("#"+id).oninput=()=>{
       // 余白以外の数値をいじる＝手動で合わせたいということなので、自動検出を降ろす
-      if(id!=="shInset" && id!=="shFocus" && shDetected){
+      if(id!=="shInset" && id!=="shFocus" && id!=="shFocusX" && shDetected){
         shDetected=null;
         $("#shStat").textContent="手動調整に切り替えました。";
       }
@@ -3599,6 +3632,7 @@ function initPhotoAdmin(){
     if(!shImage) return;
     const cells=shCells(), age=shNum("shAge",22);
     const focus=Math.min(100,Math.max(0,shNum("shFocus",35)))/100;
+    const focusX=Math.min(100,Math.max(0,shNum("shFocusX",50)))/100;
     $("#shStat").textContent=`${cells.length}枚を切り出しています…`;
     const items=cells.map(c=>{
       const key=shPanelSeg[c.pi]||"";
@@ -3607,7 +3641,12 @@ function initPhotoAdmin(){
          表示用の正方形は縦位置(focus)から都度作る。 */
       /* 上限は 560px。元セルがこれより小さければ cellData 側で等倍のまま残る
          （引き伸ばさない）。表示は最大222pxなので、これだけあれば足りる。 */
-      return {cell:cellData(shImage,c.x,c.y,c.w,c.h,560), focus,
+      /* セルは横位置を反映した位置から取る。こうすると登録後も
+         その状態を起点に1枚ずつ微調整できる。 */
+      const side=Math.min(c.w,c.h);
+      const shift=(focusX-0.5)*side;
+      const cx=Math.max(0,Math.min(c.x+shift, shImage.naturalWidth-c.w));
+      return {cell:cellData(shImage,cx,c.y,c.w,c.h,560), focus, focusX:0.5, zoom:1,
               gender:c.gender, age, orientation, companySize, tags:[]};
     });
     await addPhotos(items);
@@ -3661,7 +3700,7 @@ function initPhotoAdmin(){
         /* 1人1枚で渡される画像は元が大きいことが多い。
            シート由来より枚数が少ないので、解像度を優先して残す。 */
         items.push({cell:cellData(img,0,0,img.naturalWidth,img.naturalHeight,1024),
-                    focus:Math.min(100,Math.max(0,shNum("shFocus",35)))/100,
+                    focus:Math.min(100,Math.max(0,shNum("shFocus",35)))/100, focusX:0.5, zoom:1,
                     gender, age, orientation, companySize, tags:[]});
         freeImg(img);
       }
