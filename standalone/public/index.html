@@ -573,6 +573,7 @@ ol.qs li .why{font-size:12px;color:var(--ink-3);margin-top:3px}
              うまく切り出せなかった写真はここで削除してください。</p></div>
         <div class="phbar noprint">
           <button class="btn ghost sm" id="poolExport" type="button">この顔写真を埋め込んだHTMLを書き出す</button>
+          <button class="btn ghost sm hidden" id="poolRestore" type="button">埋め込みの写真に戻す</button>
           <button class="btn ghost sm" id="poolClear" type="button">すべて削除</button>
         </div>
         <div id="poolBulk" class="phbar noprint" style="margin-top:8px;padding:9px 11px;border:1px solid var(--hair);border-radius:10px;background:var(--surface-1)"></div>
@@ -2154,7 +2155,19 @@ function importPhotos(files){
 /* 書き出し時にここが実データで置き換わる。目印の文字列は書き出し処理が探す。 */
 const PHOTOS_EMBEDDED = /* EMBEDDED_PHOTOS_START */[]/* EMBEDDED_PHOTOS_END */;
 
-const PHOTO_STORE_KEY = "personaStudio.photos.v1";
+/* 保存キーは「埋め込まれている写真の中身」で分ける。
+   file:// で開いたページは、別のファイルでも localStorage を共有する。
+   固定キーだと、写真なしの index.html で消した記録が、
+   60枚を埋め込んだ書き出し版の中身を上書きしてしまう（実際に起きた）。 */
+function embeddedFingerprint(){
+  const arr = Array.isArray(PHOTOS_EMBEDDED) ? PHOTOS_EMBEDDED : [];
+  if(!arr.length) return "none";
+  let h = 2166136261;
+  const seed = arr.length + "|" + arr.map(p=>(p.cell||p.dataUrl||"").length).join(",");
+  for(let i=0;i<seed.length;i++){ h ^= seed.charCodeAt(i); h = Math.imul(h,16777619); }
+  return arr.length + "_" + (h>>>0).toString(36);
+}
+const PHOTO_STORE_KEY = "personaStudio.photos.v2." + embeddedFingerprint();
 
 const ORIENTATIONS = [{k:"growth",t:"成長志向"},{k:"stability",t:"安定志向"}];
 const COMPANY_SIZES = [{k:"large",t:"大手"},{k:"venture",t:"ベンチャー"},{k:"small",t:"中小"}];
@@ -2169,11 +2182,27 @@ const segLabel = (o,c)=>{
 let photoPool = [];
 
 function loadPhotoPool(){
+  const embedded = Array.isArray(PHOTOS_EMBEDDED) ? PHOTOS_EMBEDDED.slice() : [];
   try{
     const raw = localStorage.getItem(PHOTO_STORE_KEY);
-    if(raw){ photoPool = JSON.parse(raw); return; }
+    if(raw){
+      const saved = JSON.parse(raw);
+      /* 保存が空で埋め込みがある場合は埋め込みを採る。
+         「消した記録」を理由に、同梱された写真まで消して見せない。 */
+      if(Array.isArray(saved) && saved.length){ photoPool = saved; return; }
+    }
   }catch(e){ console.warn("localStorage を読めませんでした",e); }
-  photoPool = Array.isArray(PHOTOS_EMBEDDED) ? PHOTOS_EMBEDDED.slice() : [];
+  photoPool = embedded;
+}
+
+/* 埋め込みの写真に戻す。編集や削除をやり直したいときの出口。 */
+function restoreEmbeddedPhotos(){
+  const embedded = Array.isArray(PHOTOS_EMBEDDED) ? PHOTOS_EMBEDDED : [];
+  if(!embedded.length){ toast("このファイルには埋め込みの写真がありません"); return; }
+  if(!confirm(`現在の ${photoPool.length}枚 を破棄して、このファイルに埋め込まれた ${embedded.length}枚 に戻しますか？`)) return;
+  photoPool = embedded.slice();
+  poolSel.clear();
+  hydratePool().then(()=>{ savePhotoPool(); renderPhotoAdmin(); refreshAssignedPhotos(); toast(`${photoPool.length}枚に戻しました`); });
 }
 
 /* 保存用の形。表示用の正方形(dataUrl)はセルと切り出し位置から作り直せるので、
@@ -3440,6 +3469,9 @@ function renderPhotoAdmin(){
 
   renderBulkBar();
 
+  const rb=$("#poolRestore");
+  if(rb) rb.classList.toggle("hidden", !(Array.isArray(PHOTOS_EMBEDDED)&&PHOTOS_EMBEDDED.length));
+
   const one=$("#oneSeg");
   if(one && !one.options.length){
     one.innerHTML=`<option value="">分類しない</option>`+SEGMENTS.map(s=>`<option value="${s.key}">${s.label}</option>`).join("");
@@ -3640,6 +3672,7 @@ function initPhotoAdmin(){
   };
 
   $("#poolExport").onclick=exportHtmlWithPhotos;
+  $("#poolRestore").onclick=restoreEmbeddedPhotos;
   $("#poolClear").onclick=()=>{
     if(!photoPool.length) return;
     if(!confirm(`登録済みの ${photoPool.length}枚をすべて削除しますか？`)) return;
