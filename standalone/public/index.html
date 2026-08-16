@@ -504,7 +504,8 @@ ol.qs li .why{font-size:12px;color:var(--ink-3);margin-top:3px}
         <div class="phbar noprint" style="margin-bottom:10px">
           <label class="btn primary sm" for="shFile" style="cursor:pointer">シート画像を選ぶ</label>
           <input type="file" id="shFile" accept="image/*" class="hidden">
-          <button class="btn ghost sm" id="shPreset" type="button">6セグメント（3列×2行）の既定値</button>
+          <button class="btn ghost sm" id="shPreset" type="button">手動：6セグメント（3列×2行）</button>
+          <button class="btn ghost sm hidden" id="shManual" type="button">自動検出を解除</button>
           <button class="btn ghost sm" id="shSlice" type="button" disabled>切り出して登録</button>
         </div>
 
@@ -519,6 +520,7 @@ ol.qs li .why{font-size:12px;color:var(--ink-3);margin-top:3px}
             <label style="font-size:12px">1行の枚数<input type="number" id="shGCols" value="5" min="1" max="10" style="width:56px;margin-left:4px"></label>
             <label style="font-size:12px">ラベル帯%<input type="number" id="shLabel" value="16" min="0" max="40" style="width:60px;margin-left:4px"></label>
             <label style="font-size:12px">内側余白%<input type="number" id="shInset" value="3" min="0" max="20" style="width:60px;margin-left:4px"></label>
+            <label style="font-size:12px">切り出しの縦位置%<input type="number" id="shFocus" value="35" min="0" max="100" step="5" style="width:64px;margin-left:4px"></label>
             <label style="font-size:12px">年齢<input type="number" id="shAge" value="22" min="15" max="70" style="width:60px;margin-left:4px"></label>
           </div>
           <div class="phbar noprint" style="gap:8px;align-items:center">
@@ -526,7 +528,7 @@ ol.qs li .why{font-size:12px;color:var(--ink-3);margin-top:3px}
           </div>
           <p class="hint" style="margin:4px 0 8px;font-size:12px">
             <b style="color:var(--good)">緑＝男性</b>／<b style="color:#a34a93">紫＝女性</b> の枠が、実際に切り出される範囲です。
-            顔がちょうど収まるまで上の数値を調整してください。
+            自動検出が効いていれば、そのまま「切り出して登録」を押せます。
           </p>
           <div id="shWrap" style="position:relative;display:inline-block;max-width:100%">
             <img id="shImg" alt="読み込んだシート画像" style="display:block;max-width:100%;border:1px solid var(--hair);border-radius:8px">
@@ -2867,19 +2869,170 @@ const freeImg=img=>{ if(img&&img._url) URL.revokeObjectURL(img._url); };
 
 /* 正方形に切り出す。丸型アバターに切る前提なので 1:1 でないと頭頂と顎が欠ける。
    顔は中心よりやや上にあるので、上寄り（0.35）に取る。 */
-function squareData(img,sx,sy,sw,sh,size){
+function squareData(img,sx,sy,sw,sh,size,focus){
+  const f=(focus==null?0.35:focus);
   const side=Math.min(sw,sh);
-  const cx=sx+(sw-side)/2, cy=sy+(sh-side)*0.35;
+  const cx=sx+(sw-side)/2, cy=sy+(sh-side)*f;
   const c=document.createElement("canvas"); c.width=c.height=size;
   const ctx=c.getContext("2d"); ctx.imageSmoothingQuality="high";
   ctx.drawImage(img,cx,cy,side,side,0,0,size,size);
   return c.toDataURL("image/jpeg",0.8);
 }
 
+/* =====================================================================
+   シート構造の自動検出
+
+   「見出し帯 何%」を人が手で合わせるのは面倒なので、画像そのものから境界を
+   読み取る。手がかりは3つ。
+
+     1. 見出し帯 … 彩度の高い色が横一列に並ぶ → パネルの行と、その色の切れ目が
+                   パネルの列（見出しは1パネル1色なので列の境界がそのまま出る）
+     2. ラベル帯 … 「①男性」の行は白地なので、白い横帯として現れる
+     3. セルの隙間 … 写真と写真の間の細い白い縦線
+
+   検出できなかった部分は等分割に落とす。読めない画像でも必ず何か返す。
+   ===================================================================== */
+
+let shDetected = null;   // 検出結果（矩形の配列）。null なら数値入力から計算する。
+
+function shAnalyze(img){
+  // 解析用に縮小する。精度は十分で、1〜2桁速い。
+  const W = Math.min(1400, img.naturalWidth);
+  const scale = W / img.naturalWidth;
+  const H = Math.round(img.naturalHeight * scale);
+  const cv = document.createElement("canvas");
+  cv.width=W; cv.height=H;
+  const ctx = cv.getContext("2d", {willReadFrequently:true});
+  ctx.drawImage(img, 0, 0, W, H);
+  let px;
+  try{ px = ctx.getImageData(0,0,W,H).data; }
+  catch(e){ console.warn("画素を読めませんでした",e); return null; }
+
+  const white=i=>px[i]>232&&px[i+1]>232&&px[i+2]>232;
+  const sat=i=>{const mx=Math.max(px[i],px[i+1],px[i+2]),mn=Math.min(px[i],px[i+1],px[i+2]);return mx?(mx-mn)/mx:0};
+
+  const runs=(len,test,min)=>{
+    const out=[]; let s=-1;
+    for(let i=0;i<len;i++){
+      if(test(i)){ if(s<0)s=i; }
+      else if(s>=0){ if(i-s>=min) out.push([s,i]); s=-1; }
+    }
+    if(s>=0 && len-s>=min) out.push([s,len]);
+    return out;
+  };
+
+  /* --- 1. 見出し帯を探す ---
+     見出しは濃い単色なので、行あたりの彩度が突出して高い。
+     顔写真の行も、濃紺のスーツや髪でそれなりの彩度は出る（実測 0.11〜0.34）が、
+     見出し（実測 0.64〜0.76）とは倍以上の開きがある。
+     固定のしきい値だけだとシートの配色で外すので、
+     その画像の最大値からの相対でも見て、高い方を採る。 */
+  const rowSat=new Float32Array(H), rowWhite=new Float32Array(H);
+  for(let y=0;y<H;y++){
+    let s=0,w=0;
+    for(let x=0;x<W;x++){ const i=(y*W+x)*4; s+=sat(i); if(white(i))w++; }
+    rowSat[y]=s/W; rowWhite[y]=w/W;
+  }
+  let maxSat=0; for(let y=0;y<H;y++) if(rowSat[y]>maxSat) maxSat=rowSat[y];
+  const satGate = Math.max(0.45, maxSat*0.55);
+  const headers = runs(H, y=>rowSat[y]>satGate && rowWhite[y]<0.30, Math.max(5,H*0.012));
+  const pRows = headers.length;
+  if(pRows<1 || pRows>6) return null;
+
+  /* --- 2. パネルの列 ---
+     見出し帯の中だけを横に見る。パネルごとに色が違い、間は白なので、
+     色の乗っている区間がそのままパネルの列になる。 */
+  const [h0,h1]=headers[0];
+  const colSat=new Float32Array(W);
+  for(let x=0;x<W;x++){ let s=0; for(let y=h0;y<h1;y++) s+=sat((y*W+x)*4); colSat[x]=s/(h1-h0); }
+  let panelCols = runs(W, x=>colSat[x]>0.25, Math.max(10, W*0.05));
+  if(!panelCols.length || panelCols.length>6) return null;
+
+  /* --- 3. パネル内の写真の行 ---
+     顔写真は背景が白いものが多く、「白い＝隙間」では切れない。
+     代わりにラベル帯（「①男性」の行）を探す。ここは文字以外ほぼ純白で、
+     パネルの幅いっぱいに続くので、写真の帯とはっきり区別がつく。
+     見つからなければ等分割に落とす。 */
+  const gRows = Math.max(1, Math.min(6, shNum("shGRows",2)));
+  const gCols = Math.max(1, Math.min(10, shNum("shGCols",5)));
+  const cells=[];
+
+  headers.forEach(([hs,he],pr)=>{
+    const panelBottom = pr+1<headers.length ? headers[pr+1][0] : H;
+    panelCols.forEach(([px0,px1],pc)=>{
+      const pw=px1-px0, bodyTop=he, bodyH=panelBottom-bodyTop;
+      if(bodyH<10) return;
+
+      // パネル幅での行ごとの白率
+      const w2=new Float32Array(bodyH);
+      for(let y=bodyTop;y<panelBottom;y++){
+        let w=0; for(let x=px0;x<px1;x++) if(white((y*W+x)*4)) w++;
+        w2[y-bodyTop]=w/pw;
+      }
+      // ラベル帯＝ほぼ純白の横帯
+      const labels = runs(bodyH, k=>w2[k]>0.88, Math.max(4, bodyH*0.02));
+
+      let bands=[];
+      if(labels.length>=gRows){
+        // 「直前の区切りの終わり」から「次のラベル帯の始まり」までが写真の帯
+        let cur=0;
+        for(let i=0;i<gRows;i++){
+          const lab=labels[i];
+          if(!lab) break;
+          if(lab[0]-cur > bodyH*0.05) bands.push([bodyTop+cur, bodyTop+lab[0]]);
+          cur=lab[1];
+        }
+      }
+      if(bands.length!==gRows){
+        // ラベル帯を読めなかった場合は、入力値どおりの等分割にする
+        const labelPct=Math.min(40,Math.max(0,shNum("shLabel",16)))/100;
+        const band=bodyH/gRows;
+        bands=Array.from({length:gRows},(_,i)=>
+          [bodyTop+i*band, bodyTop+i*band+band*(1-labelPct)]);
+      }
+
+      /* --- 4. 帯の中の1枚ずつ ---
+         横方向は等分割にする。顔写真の背景が白いせいで縦の隙間は当てにならず、
+         検出を試みると写真の内側で切れてしまう（実測で60枚が237枚になった）。
+         並びは必ず等間隔なので、等分割の方が正確。 */
+      bands.forEach((band,bi)=>{
+        const cwid=pw/gCols;
+        for(let ci=0;ci<gCols;ci++){
+          cells.push({pi:pr*panelCols.length+pc, r:bi, c:ci,
+            x:(px0+ci*cwid)/scale, y:band[0]/scale,
+            w:cwid/scale, h:(band[1]-band[0])/scale});
+        }
+      });
+    });
+  });
+
+  /* --- 5. 検算 ---
+     数が合わないものは信用しない。中途半端に当たった検出を通すと、
+     ズレたまま60枚登録されて後始末が大変になる。 */
+  const expect = pRows*panelCols.length*gRows*gCols;
+  if(cells.length!==expect || !cells.length) return null;
+
+  return {cells, panelCols:panelCols.length, panelRows:pRows, rowsPerPanel:gRows, colsPerRow:gCols};
+}
+
 /* シートの幾何。パネル＝セグメント、各パネルは
    見出し帯 →［写真の行 → ラベル帯］×N。ラベル帯を引かないと
    切り出した顔の下に「①男性」の文字が写り込む。 */
 function shCells(){
+  /* 自動検出が成功していればそれを使う。パネル内の余白だけは
+     手で詰められるようにしておく（顔が枠からはみ出す場合の逃げ道）。 */
+  if(shDetected){
+    const inset=Math.min(20,Math.max(0,shNum("shInset",0)))/100;
+    return shDetected.cells.map(c=>{
+      const ix=c.w*inset, iy=c.h*inset;
+      return {...c, x:c.x+ix, y:c.y+iy, w:c.w-ix*2, h:c.h-iy*2,
+              gender: shRowGender[c.r] || "unknown"};
+    });
+  }
+  return shCellsManual();
+}
+
+function shCellsManual(){
   if(!shImage) return [];
   const W=shImage.naturalWidth, H=shImage.naturalHeight;
   const pC=shNum("shPCols",1), pR=shNum("shPRows",1);
@@ -2907,9 +3060,10 @@ function shDraw(){
   cv.width=img.clientWidth; cv.height=img.clientHeight;
   const ctx=cv.getContext("2d"); ctx.clearRect(0,0,cv.width,cv.height);
   const sx=cv.width/shImage.naturalWidth, sy=cv.height/shImage.naturalHeight;
+  const focus=Math.min(100,Math.max(0,shNum("shFocus",35)))/100;
   for(const c of shCells()){
     const side=Math.min(c.w,c.h);
-    const x=(c.x+(c.w-side)/2)*sx, y=(c.y+(c.h-side)*0.35)*sy;
+    const x=(c.x+(c.w-side)/2)*sx, y=(c.y+(c.h-side)*focus)*sy;
     ctx.strokeStyle=c.gender==="female"?"rgba(163,74,147,.95)":"rgba(12,140,90,.95)";
     ctx.lineWidth=2; ctx.strokeRect(x,y,side*sx,side*sy);
   }
@@ -3049,6 +3203,7 @@ function initPhotoAdmin(){
     $("#shPCols").value=3; $("#shPRows").value=2;
     $("#shGRows").value=2; $("#shGCols").value=5;
     $("#shHead").value=9; $("#shLabel").value=16; $("#shInset").value=3;
+    shDetected=null;                          // 手動の既定値に戻す
     shRowGender=["male","female"];
     shPanelSeg=SHEET_PRESET_ORDER.slice();   // 並び順も既定に戻す
     shRenderRows(); shRenderPanels(); shDraw();
@@ -3063,14 +3218,54 @@ function initPhotoAdmin(){
       $("#shImg").onload=shDraw;
       $("#shImg").src=shImage._url;
       $("#shSlice").disabled=false;
+      $("#shStat").textContent="シートの構造を解析しています…";
+
+      // 解析は少し時間がかかるので、先に画像を出してから走らせる
+      await new Promise(r=>setTimeout(r,30));
+      shDetected = shAnalyze(shImage);
+
+      if(shDetected){
+        // 検出結果を数値欄にも反映しておく（手で直したくなったときの出発点になる）
+        $("#shPCols").value=shDetected.panelCols;
+        $("#shPRows").value=shDetected.panelRows;
+        $("#shGRows").value=shDetected.rowsPerPanel;
+        $("#shGCols").value=shDetected.colsPerRow;
+        shRowGender=Array.from({length:shDetected.rowsPerPanel},(_,i)=>i===0?"male":"female");
+        shPanelSeg=SHEET_PRESET_ORDER.slice();
+        $("#shStat").innerHTML=
+          `<b style="color:var(--good)">自動検出しました</b>：`
+          +`パネル ${shDetected.panelCols}列×${shDetected.panelRows}行、`
+          +`各パネル ${shDetected.rowsPerPanel}行×${shDetected.colsPerRow}枚 `
+          +`＝ 計 ${shDetected.cells.length}枚。<br>`
+          +`枠が顔に合っていればそのまま「切り出して登録」を押してください。`
+          +`ズレている場合は「自動検出を解除」から手動調整に切り替えられます。`;
+        $("#shManual").classList.remove("hidden");
+      }else{
+        $("#shManual").classList.add("hidden");
+        $("#shStat").textContent=
+          `${shImage.naturalWidth}×${shImage.naturalHeight}px を読み込みました。`
+          +`自動検出できなかったため、枠が顔に合うまで数値を調整してください。`;
+      }
       shRenderRows(); shRenderPanels(); setTimeout(shDraw,60);
-      $("#shStat").textContent=`${shImage.naturalWidth}×${shImage.naturalHeight}px を読み込みました。枠が顔に合うまで数値を調整してください。`;
     }catch(err){ $("#shStat").textContent="読み込みに失敗しました："+err.message; }
     finally{ e.target.value=""; }
   };
 
-  ["shPCols","shPRows","shGRows","shGCols","shHead","shLabel","shInset"].forEach(id=>{
+  /* 自動検出を捨てて手動に切り替える。誤検出したときの逃げ道。 */
+  $("#shManual").onclick=()=>{
+    shDetected=null;
+    $("#shManual").classList.add("hidden");
+    $("#shStat").textContent="手動調整に切り替えました。見出し帯%・ラベル帯% で枠を合わせてください。";
+    shDraw();
+  };
+
+  ["shPCols","shPRows","shGRows","shGCols","shHead","shLabel","shInset","shFocus"].forEach(id=>{
     $("#"+id).oninput=()=>{
+      // 余白以外の数値をいじる＝手動で合わせたいということなので、自動検出を降ろす
+      if(id!=="shInset" && id!=="shFocus" && shDetected){
+        shDetected=null;
+        $("#shStat").textContent="手動調整に切り替えました。";
+      }
       if(id==="shGRows") shRenderRows();
       if(id==="shPCols"||id==="shPRows") shRenderPanels();
       shDraw();
@@ -3081,11 +3276,12 @@ function initPhotoAdmin(){
   $("#shSlice").onclick=()=>{
     if(!shImage) return;
     const cells=shCells(), age=shNum("shAge",22);
+    const focus=Math.min(100,Math.max(0,shNum("shFocus",35)))/100;
     $("#shStat").textContent=`${cells.length}枚を切り出しています…`;
     const items=cells.map(c=>{
       const key=shPanelSeg[c.pi]||"";
       const [orientation,companySize]=key?key.split(":"):["",""];
-      return {dataUrl:squareData(shImage,c.x,c.y,c.w,c.h,448),
+      return {dataUrl:squareData(shImage,c.x,c.y,c.w,c.h,448,focus),
               gender:c.gender, age, orientation, companySize, tags:[]};
     });
     addPhotos(items);
