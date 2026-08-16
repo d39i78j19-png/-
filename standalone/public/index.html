@@ -540,8 +540,9 @@ ol.qs li .why{font-size:12px;color:var(--ink-3);margin-top:3px}
       </div>
 
       <div class="card pad" style="margin-top:18px">
-        <div class="sect-h" style="margin-bottom:10px"><h2 style="font-size:17px">1枚ずつ取り込む</h2>
-          <p>すでに正方形に切り出された顔写真がある場合はこちら。複数選択できます。</p></div>
+        <div class="sect-h" style="margin-bottom:10px"><h2 style="font-size:17px">1枚ずつ取り込む（1人＝1ファイルの場合）</h2>
+          <p><b>顔が1人だけ写った画像</b>を登録します。複数選択できます。<br>
+             ※ 何人も並んだシート画像をここに入れた場合は、自動で上の「シート取り込み」に回します。</p></div>
         <div class="phbar noprint">
           <label class="btn ghost sm" for="oneFile" style="cursor:pointer">画像を選ぶ</label>
           <input type="file" id="oneFile" accept="image/*" multiple class="hidden">
@@ -2494,6 +2495,15 @@ async function regenAllPhotos(){
       }
     });
     renderDash(); renderPersona(cands[candIdx]);
+
+    /* 枚数が足りないと全員に同じ顔が付く。原因は大抵「シート画像を1枚として
+       登録してしまった」なので、症状だけでなく直し方まで出す。 */
+    if(photoPool.length < cands.length){
+      setPhotoStat(`登録されている顔写真が ${photoPool.length}枚しかないため、`
+        +`同じ顔が重複しています。シート画像を1枚として登録していませんか？ `
+        +`「顔写真プール」で一度すべて削除し、「セグメント別シートを取り込む」から読み込み直してください。`);
+      return;
+    }
     setPhotoStat(`${cands.length}件の顔写真を「${label}」から割り当てました。`
       +(mismatched?`（うち${mismatched}件は同セグメントの写真が足りず、近い分類で代用しています）`:""));
     return;
@@ -3297,7 +3307,42 @@ function initPhotoAdmin(){
       const items=[];
       for(const f of files){
         const img=await loadImg(f);
-        items.push({dataUrl:squareData(img,0,0,img.naturalWidth,img.naturalHeight,448),
+
+        /* ここにシート画像を入れてしまうのが起きやすい取り違え。
+           そのまま通すと「シート全体が写った1枚」が登録され、
+           ペルソナ全員に同じ絵が付く。弾くのではなく、シート側に回す。 */
+        const looksLikeSheet = shAnalyze(img);
+        if(looksLikeSheet && looksLikeSheet.cells.length>=4){
+          freeImg(shImage);
+          shImage=img;
+          shDetected=looksLikeSheet;
+          $("#shControls").classList.remove("hidden");
+          $("#shImg").onload=shDraw;
+          $("#shImg").src=img._url;
+          $("#shSlice").disabled=false;
+          $("#shManual").classList.remove("hidden");
+          $("#shPCols").value=looksLikeSheet.panelCols;
+          $("#shPRows").value=looksLikeSheet.panelRows;
+          $("#shGRows").value=looksLikeSheet.rowsPerPanel;
+          $("#shGCols").value=looksLikeSheet.colsPerRow;
+          shRowGender=Array.from({length:looksLikeSheet.rowsPerPanel},(_,i)=>i===0?"male":"female");
+          shPanelSeg=SHEET_PRESET_ORDER.slice();
+          shRenderRows(); shRenderPanels(); setTimeout(shDraw,60);
+          $("#oneStat").innerHTML=
+            `<b style="color:var(--s2)">これは1枚の顔写真ではなく、シート画像のようです。</b>`
+            +`上の「セグメント別シートを取り込む」に移しました（${looksLikeSheet.cells.length}枚を検出）。<br>`
+            +`枠を確認して「切り出して登録」を押してください。`;
+          $("#shStat").innerHTML=
+            `<b style="color:var(--good)">自動検出しました</b>：`
+            +`パネル ${looksLikeSheet.panelCols}列×${looksLikeSheet.panelRows}行、`
+            +`各パネル ${looksLikeSheet.rowsPerPanel}行×${looksLikeSheet.colsPerRow}枚 `
+            +`＝ 計 ${looksLikeSheet.cells.length}枚。枠を確認して「切り出して登録」を押してください。`;
+          $("#shWrap").scrollIntoView({behavior:"smooth",block:"center"});
+          return;
+        }
+
+        items.push({dataUrl:squareData(img,0,0,img.naturalWidth,img.naturalHeight,448,
+                                       Math.min(100,Math.max(0,shNum("shFocus",35)))/100),
                     gender, age, orientation, companySize, tags:[]});
         freeImg(img);
       }
