@@ -49,6 +49,20 @@
 **「JSONで書き出す」**で企業情報・ペルソナ定義・採点済み候補者・スカウトメールを1ファイルに
 まとめてダウンロードできます。**「JSONを読み込む」**で復元・共有できます。
 
+## ペルソナの顔写真を生成する
+
+プロトタイプ画面（`standalone/public/index.html`）でペルソナの顔写真を実写品質で
+生成するためのサーバーが `standalone/` にあります。依存パッケージなしで動きます。
+
+```bash
+export GEMINI_API_KEY="..."   # https://aistudio.google.com/apikey
+npm run portraits:serve       # http://localhost:8787 を開く
+```
+
+キーが無い場合も画面は動作し、事前生成プールかプレースホルダが表示されます。
+課金前にプロンプトを確認するには `npm run portraits:dry-run`。
+プロンプト設計の考え方・費用・失敗時の直し方は [`standalone/README.md`](standalone/README.md) を参照してください。
+
 ## 開発する人向け
 
 ```bash

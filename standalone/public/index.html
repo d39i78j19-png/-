@@ -1,0 +1,2555 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HR Persona Voice AI — 新卒採用ペルソナ生成アプリ（プロトタイプ）</title>
+<style>
+:root{
+  color-scheme: light;
+  --surface-1:#fcfcfb; --page:#f9f9f7; --card:#ffffff;
+  --ink-1:#0b0b0b; --ink-2:#52514e; --ink-3:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --hair:rgba(11,11,11,.10);
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s7:#4a3aa7;
+  --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+  --brandbg:#0f1830; --brandbg2:#1b2a52;
+  --r:14px; --shadow:0 1px 2px rgba(11,11,11,.05),0 8px 24px -12px rgba(11,11,11,.18);
+  --font:"Hiragino Kaku Gothic ProN","Yu Gothic UI","Noto Sans JP",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --surface-1:#1a1a19; --page:#0d0d0d; --card:#1a1a19;
+  --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
+  --grid:#2c2c2a; --axis:#383835; --hair:rgba(255,255,255,.10);
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s7:#9085e9;
+  --brandbg:#0a0f1e; --brandbg2:#141f3d;
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 8px 24px -12px rgba(0,0,0,.7);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--page);color:var(--ink-1);font-family:var(--font);
+  font-size:15px;line-height:1.75;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{line-height:1.4;margin:0}
+button{font-family:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+
+/* ---------- header ---------- */
+header.top{background:linear-gradient(135deg,var(--brandbg),var(--brandbg2));color:#fff;
+  padding:26px 0 22px;position:relative;overflow:hidden}
+header.top::after{content:"";position:absolute;inset:auto -10% -60% 55%;height:220px;
+  background:radial-gradient(closest-side,rgba(58,135,229,.45),transparent);filter:blur(10px)}
+.brandrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap;position:relative;z-index:1}
+.logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(140deg,#3987e5,#1baf7a);
+  display:grid;place-items:center;font-weight:800;font-size:16px;letter-spacing:-.5px;color:#fff;flex:none}
+.brandrow h1{font-size:19px;font-weight:800;letter-spacing:.2px}
+.brandrow .sub{font-size:12.5px;color:#b9c6e2;font-weight:500}
+.tags{margin-left:auto;display:flex;gap:8px;align-items:center}
+.chip{font-size:11.5px;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.12);
+  border:1px solid rgba(255,255,255,.18);color:#e7edfa;font-weight:600;white-space:nowrap}
+.iconbtn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;
+  border-radius:9px;padding:5px 10px;font-size:12px;cursor:pointer;font-weight:600}
+.iconbtn:hover{background:rgba(255,255,255,.22)}
+
+/* ---------- stepper ---------- */
+.stepper{background:var(--card);border-bottom:1px solid var(--hair);position:sticky;top:0;z-index:20}
+.steps{display:flex;gap:6px;padding:10px 0;overflow-x:auto}
+.step{display:flex;align-items:center;gap:9px;padding:8px 15px;border-radius:999px;font-size:13px;
+  font-weight:600;color:var(--ink-3);white-space:nowrap;border:1px solid transparent;background:none;cursor:pointer}
+.step .n{width:21px;height:21px;border-radius:50%;background:var(--grid);color:var(--ink-2);
+  display:grid;place-items:center;font-size:11.5px;font-weight:700;flex:none}
+.step[aria-current="true"]{background:color-mix(in srgb,var(--s1) 10%,transparent);color:var(--s1);border-color:color-mix(in srgb,var(--s1) 28%,transparent)}
+.step[aria-current="true"] .n{background:var(--s1);color:#fff}
+.step.done{color:var(--ink-1)}
+.step.done .n{background:var(--s3);color:#fff}
+
+main{padding:30px 0 90px}
+.sect-h{margin-bottom:18px}
+.sect-h h2{font-size:22px;font-weight:800;letter-spacing:-.2px}
+.sect-h p{margin:5px 0 0;color:var(--ink-2);font-size:13.5px}
+
+.card{background:var(--card);border:1px solid var(--hair);border-radius:var(--r);box-shadow:var(--shadow)}
+.pad{padding:22px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+@media(max-width:900px){.grid2,.grid3{grid-template-columns:1fr}}
+
+/* ---------- form ---------- */
+fieldset{border:none;margin:0 0 26px;padding:0}
+legend{padding:0;margin-bottom:10px}
+.lg{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.lg b{font-size:15px;font-weight:700}
+.lg span{font-size:12px;color:var(--ink-3)}
+.lg .req{font-size:10.5px;font-weight:700;color:var(--s2);border:1px solid currentColor;
+  border-radius:4px;padding:0 5px;letter-spacing:.4px}
+.opts{display:flex;flex-wrap:wrap;gap:8px}
+.opt{position:relative}
+.opt input{position:absolute;opacity:0;width:0;height:0}
+.opt span{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--hair);
+  background:var(--card);border-radius:10px;padding:8px 13px;font-size:13.5px;cursor:pointer;
+  color:var(--ink-1);transition:.12s;user-select:none;line-height:1.5}
+.opt span::before{content:"";width:15px;height:15px;border-radius:4px;border:1.5px solid var(--axis);flex:none}
+.opt input:checked + span{border-color:var(--s1);background:color-mix(in srgb,var(--s1) 8%,var(--card));color:var(--s1);font-weight:600}
+.opt input:checked + span::before{background:var(--s1);border-color:var(--s1);
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M3 8.5l3.2 3.2L13 5'/></svg>");
+  background-size:13px;background-repeat:no-repeat;background-position:center}
+.opt input:focus-visible + span{outline:2px solid var(--s1);outline-offset:2px}
+.opt.radio span::before{border-radius:50%}
+.opt.radio input:checked + span::before{background-image:none;box-shadow:inset 0 0 0 3px var(--card)}
+.opt span small{color:var(--ink-3);font-weight:400;font-size:11.5px}
+.opt input:checked + span small{color:inherit;opacity:.8}
+.txtrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+label.f{display:block;font-size:12px;font-weight:700;color:var(--ink-2);margin-bottom:5px}
+input[type=text],select,textarea{width:100%;padding:9px 12px;border:1px solid var(--hair);border-radius:9px;
+  background:var(--surface-1);color:var(--ink-1);font-size:14px;font-family:inherit}
+input[type=text]:focus,select:focus,textarea:focus{outline:2px solid var(--s1);outline-offset:0;border-color:var(--s1)}
+.count{font-size:11.5px;color:var(--ink-3);margin-left:auto;font-variant-numeric:tabular-nums}
+
+/* ---------- buttons ---------- */
+.btn{border:1px solid transparent;border-radius:10px;padding:11px 20px;font-size:14px;font-weight:700;
+  cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:.12s}
+.btn.primary{background:var(--s1);color:#fff}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.primary:disabled{opacity:.4;cursor:not-allowed;filter:none}
+.btn.ghost{background:var(--card);color:var(--ink-1);border-color:var(--hair)}
+.btn.ghost:hover{background:var(--surface-1)}
+.btn.sm{padding:7px 13px;font-size:12.5px;border-radius:8px}
+.actionbar{position:sticky;bottom:0;background:color-mix(in srgb,var(--page) 88%,transparent);
+  backdrop-filter:blur(8px);border-top:1px solid var(--hair);padding:14px 0;margin-top:8px;z-index:15}
+.actionbar .wrap{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.hint{font-size:12.5px;color:var(--ink-3)}
+
+/* ---------- persona card ---------- */
+.pcard{display:grid;grid-template-columns:262px 1fr;gap:0;overflow:hidden}
+@media(max-width:820px){.pcard{grid-template-columns:1fr}}
+.photo{background:linear-gradient(160deg,#eef3fb,#e6ecf7);padding:20px;border-right:1px solid var(--hair)}
+.photo .inner{position:sticky;top:78px;display:flex;flex-direction:column;gap:12px;align-items:center}
+:root[data-theme="dark"] .photo{background:linear-gradient(160deg,#141822,#10141c)}
+.photo svg{width:100%;height:auto;border-radius:12px;display:block;box-shadow:0 6px 18px -8px rgba(11,11,11,.4)}
+.photo .cap{font-size:10.5px;color:var(--ink-3);text-align:center;line-height:1.5}
+.pmain{padding:22px}
+.pname{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.pname h3{font-size:24px;font-weight:800;letter-spacing:-.3px}
+.pname .kana{font-size:12px;color:var(--ink-3)}
+.badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;
+  background:color-mix(in srgb,var(--s1) 12%,transparent);color:var(--s1)}
+.badge.g{background:color-mix(in srgb,var(--s3) 14%,transparent);color:var(--s3)}
+.badge.o{background:color-mix(in srgb,var(--s2) 13%,transparent);color:var(--s2)}
+.meta{display:flex;flex-wrap:wrap;gap:6px 18px;margin:10px 0 14px;font-size:13px;color:var(--ink-2)}
+.meta b{color:var(--ink-1);font-weight:600}
+.lead{font-size:14.5px;line-height:1.9;background:var(--surface-1);border-left:3px solid var(--s1);
+  padding:13px 16px;border-radius:0 10px 10px 0;margin:0}
+
+.blk{margin-top:22px}
+.blk > h4{font-size:12px;font-weight:800;letter-spacing:.9px;color:var(--ink-3);
+  text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.blk > h4::after{content:"";flex:1;height:1px;background:var(--grid)}
+
+.voice{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+.voice li{position:relative;background:var(--surface-1);border:1px solid var(--hair);
+  border-radius:12px;padding:12px 15px 12px 42px;font-size:14px;line-height:1.8}
+.voice li::before{content:"“";position:absolute;left:13px;top:6px;font-size:30px;color:var(--s2);
+  font-family:Georgia,serif;line-height:1}
+.voice li .tag{display:block;font-size:11px;color:var(--ink-3);margin-top:5px;font-weight:600}
+
+.kv{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:13.5px;align-items:baseline}
+.kv dt{color:var(--ink-3);font-weight:700;font-size:12px;white-space:nowrap}
+.kv dd{margin:0}
+.pill{display:inline-block;font-size:12.5px;padding:3px 10px;border-radius:999px;
+  border:1px solid var(--hair);background:var(--surface-1);margin:0 5px 5px 0}
+.pill.warnp{border-color:color-mix(in srgb,var(--s2) 40%,transparent);color:var(--s2)}
+.pill.okp{border-color:color-mix(in srgb,var(--s3) 45%,transparent);color:var(--s3)}
+
+/* ---------- charts ---------- */
+.viz{background:var(--surface-1);border:1px solid var(--hair);border-radius:12px;padding:16px}
+.viz h5{margin:0 0 2px;font-size:14px;font-weight:700}
+.viz .note{margin:0 0 12px;font-size:11.5px;color:var(--ink-3)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);margin-top:10px}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:6px;vertical-align:-1px}
+.bars{display:flex;flex-direction:column;gap:13px;margin-top:4px}
+.barrow .lbl{font-size:12.5px;color:var(--ink-2);margin-bottom:5px;display:flex;justify-content:space-between;gap:10px}
+.barrow .lbl b{color:var(--ink-1);font-weight:600}
+.track{display:flex;flex-direction:column;gap:2px}
+.bar{height:11px;border-radius:0 4px 4px 0;position:relative;min-width:2px}
+.bar span{position:absolute;left:calc(100% + 7px);top:-4px;font-size:11px;color:var(--ink-2);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+table.tbl{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:12px}
+table.tbl th,table.tbl td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--grid)}
+table.tbl th{color:var(--ink-3);font-weight:700;font-size:11.5px}
+table.tbl td.num{text-align:right;font-variant-numeric:tabular-nums}
+details.tblwrap summary{font-size:12px;color:var(--ink-3);cursor:pointer;margin-top:10px}
+
+/* ---------- creative output ---------- */
+.out{border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.out > header{display:flex;align-items:center;gap:10px;padding:11px 15px;background:var(--surface-1);
+  border-bottom:1px solid var(--hair)}
+.out > header h4{font-size:14px;font-weight:700;flex:1}
+.out > header .k{font-size:11px;color:var(--ink-3)}
+.out .body{padding:16px}
+.mail{font-size:14px;line-height:1.95;white-space:pre-wrap;word-break:break-word}
+.subj{font-size:14px;font-weight:700;padding:10px 13px;background:var(--surface-1);border-radius:9px;
+  margin-bottom:6px;border:1px solid var(--hair);display:flex;gap:10px;align-items:flex-start}
+.subj em{font-style:normal;font-size:10.5px;font-weight:800;color:#fff;background:var(--s1);
+  padding:2px 7px;border-radius:5px;flex:none;margin-top:2px}
+.copyq{font-size:19px;font-weight:800;line-height:1.6;padding:14px 16px;border-radius:11px;
+  background:linear-gradient(120deg,color-mix(in srgb,var(--s1) 9%,var(--surface-1)),var(--surface-1));
+  border:1px solid var(--hair);margin-bottom:9px;letter-spacing:-.2px}
+.copyq small{display:block;font-size:11.5px;font-weight:600;color:var(--ink-3);margin-top:6px;letter-spacing:0}
+ol.qs{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:13px}
+ol.qs li{font-size:14px;line-height:1.8}
+ol.qs li b{display:block;font-weight:700}
+ol.qs li .why{font-size:12px;color:var(--ink-3);margin-top:3px}
+.ngok{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:700px){.ngok{grid-template-columns:1fr}}
+.ngok > div{border:1px solid var(--hair);border-radius:11px;padding:13px 15px;background:var(--surface-1)}
+.ngok h6{margin:0 0 7px;font-size:11.5px;font-weight:800;letter-spacing:.6px}
+.ngok .ng h6{color:var(--crit)} .ngok .ok h6{color:var(--good)}
+.ngok p{margin:0;font-size:13.5px;line-height:1.8}
+
+.saved{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.savedcard{border:1px solid var(--hair);border-radius:11px;padding:9px 12px;display:flex;gap:10px;
+  align-items:center;background:var(--card);font-size:12.5px;cursor:pointer}
+.savedcard svg{width:34px;height:34px;border-radius:7px;flex:none}
+.savedcard b{display:block;font-size:13px}
+.savedcard s{display:block;text-decoration:none;color:var(--ink-3);font-size:11px}
+
+.toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);background:var(--ink-1);
+  color:var(--page);padding:10px 18px;border-radius:999px;font-size:13px;font-weight:600;opacity:0;
+  pointer-events:none;transition:.22s;z-index:99}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.hidden{display:none !important}
+.note-src{font-size:11.5px;color:var(--ink-3);line-height:1.8}
+.note-src a{color:var(--s1)}
+@media print{
+  header.top,.stepper,.actionbar,.noprint{display:none!important}
+  body{background:#fff} .card{box-shadow:none;break-inside:avoid}
+}
+
+/* ================= アプリシェル（ダッシュボード） ================= */
+.shell{display:grid;grid-template-columns:104px 1fr;min-height:calc(100vh - 78px)}
+.nav{background:var(--brandbg);padding:14px 8px;display:flex;flex-direction:column;gap:4px}
+.navb{background:none;border:none;color:#93a4c6;border-radius:11px;padding:11px 4px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:6px;font-size:10.5px;font-weight:700;line-height:1.35;text-align:center}
+.navb svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.navb:hover{background:rgba(255,255,255,.07);color:#cfdaf0}
+.navb.on{background:rgba(255,255,255,.13);color:#fff}
+.viewhost{padding:0;min-width:0;background:var(--page)}
+
+.dash{display:grid;grid-template-columns:minmax(320px,380px) minmax(300px,1fr) minmax(280px,330px);
+  gap:0;align-items:stretch;min-height:calc(100vh - 78px)}
+@media(max-width:1180px){.dash{grid-template-columns:1fr}}
+.col{padding:20px;min-width:0;border-right:1px solid var(--hair)}
+.col:last-child{border-right:none;background:var(--surface-1)}
+.colh{margin-bottom:14px}
+.colh h3{font-size:16px;font-weight:800;letter-spacing:-.2px}
+.colh p{margin:4px 0 0;font-size:12px;color:var(--ink-3);line-height:1.7}
+.eyebrow{font-size:10.5px;font-weight:800;letter-spacing:1.1px;color:var(--ink-3);text-transform:uppercase;margin-bottom:9px}
+
+/* 条件パネル（コンパクト版チェック） */
+.cbox{border:1px solid var(--hair);border-radius:12px;padding:11px 12px;margin-bottom:10px;background:var(--card)}
+.cbox > b{display:block;font-size:11.5px;font-weight:800;color:var(--ink-2);margin-bottom:8px;letter-spacing:.3px}
+.cbox .opts{gap:6px}
+.cbox .opt span{padding:5px 9px;font-size:12px;border-radius:8px;gap:6px}
+.cbox .opt span::before{width:13px;height:13px;background-size:11px}
+.mini{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mini label.f{font-size:10.5px;margin-bottom:3px}
+.mini input,.mini select{padding:6px 9px;font-size:12.5px;border-radius:7px}
+.genbtn{width:100%;justify-content:center;background:var(--s3);color:#fff;font-size:14.5px;padding:13px}
+.genbtn:hover{filter:brightness(1.06)}
+.genbtn:disabled{opacity:.45;cursor:not-allowed;filter:none}
+
+/* 候補リスト */
+.cands{display:flex;flex-direction:column;gap:8px}
+.cand{display:flex;gap:10px;align-items:center;border:1px solid var(--hair);border-radius:12px;
+  padding:8px;background:var(--card);cursor:pointer;text-align:left;width:100%}
+.cand:hover{border-color:color-mix(in srgb,var(--s1) 45%,transparent)}
+.cand.on{border-color:var(--s1);box-shadow:0 0 0 2px color-mix(in srgb,var(--s1) 22%,transparent)}
+.cand .th{width:44px;height:48px;border-radius:8px;overflow:hidden;flex:none;background:var(--grid)}
+.cand .th svg{width:100%;height:100%;object-fit:cover;display:block}
+.cand b{display:block;font-size:12.5px;font-weight:700;white-space:nowrap}
+.cand s{display:block;text-decoration:none;font-size:10.5px;color:var(--ink-3);line-height:1.5}
+.cand .sc{margin-left:auto;font-size:12px;font-weight:800;color:var(--s1);font-variant-numeric:tabular-nums;padding-right:4px}
+
+.hero{border:1px solid var(--hair);border-radius:14px;overflow:hidden;background:var(--card);box-shadow:var(--shadow)}
+.hero{max-width:372px}
+.hero .ph{background:linear-gradient(160deg,#eaf0f9,#dde5f2);position:relative;overflow:hidden}
+.hero .ph svg,.hero .ph img{width:100%;display:block}
+.hero .in{padding:14px 16px}
+.hero h4{font-size:19px;font-weight:800;letter-spacing:-.2px}
+.hero .sub2{font-size:11.5px;color:var(--ink-3);margin-top:2px;line-height:1.6}
+.hero .sm{font-size:12.5px;line-height:1.8;color:var(--ink-2);margin:10px 0 0}
+.match{display:flex;align-items:center;gap:10px;background:var(--s1);color:#fff;padding:9px 16px;font-weight:800}
+.match .n{font-size:24px;letter-spacing:-.5px;margin-left:auto;font-variant-numeric:tabular-nums}
+.match .n small{font-size:12px;opacity:.75;font-weight:700}
+.hero .icons{display:flex;gap:12px;margin-top:11px;color:var(--ink-3)}
+.hero .icons svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8}
+
+/* 分析ラボ */
+.lab{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;margin-bottom:12px}
+.lab h5{margin:0 0 7px;font-size:11px;font-weight:800;letter-spacing:.8px;color:var(--ink-3);text-transform:uppercase}
+.lab p{margin:0;font-size:12.5px;line-height:1.8}
+.metric{margin-bottom:11px}
+.metric .top{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px}
+.metric .top b{font-weight:600}
+.metric .top span{font-variant-numeric:tabular-nums;font-weight:800;color:var(--ink-1)}
+.metric .tr{height:7px;border-radius:0 4px 4px 0;background:var(--grid);overflow:hidden}
+.metric .tr i{display:block;height:100%;border-radius:0 4px 4px 0;background:var(--s1)}
+.emolog{font-size:12.5px;line-height:1.85;background:var(--surface-1);border-left:3px solid var(--s2);
+  padding:9px 12px;border-radius:0 8px 8px 0;margin-bottom:8px}
+.emolog s{display:block;text-decoration:none;font-size:10.5px;color:var(--ink-3);margin-top:4px}
+.draft{background:var(--surface-1);border:1px solid var(--hair);border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.8}
+.apikey{font-size:11.5px}
+.apikey input{font-size:12px;padding:7px 10px}
+.warnbox{border:1px solid color-mix(in srgb,var(--s2) 40%,transparent);background:color-mix(in srgb,var(--s2) 7%,transparent);
+  border-radius:10px;padding:10px 12px;font-size:11.5px;line-height:1.75;color:var(--ink-2)}
+.phbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.face{display:block;width:100%;height:auto;object-fit:cover;object-position:center 30%;background:#eaeff5}
+.cand .th .face{width:100%;height:100%}
+.hero .ph .face{width:100%;height:auto}
+.photo .face{border-radius:12px;box-shadow:0 6px 18px -8px rgba(11,11,11,.4)}
+.aigen{font-size:10px;color:var(--ink-3);text-align:center;margin:6px 0 0;line-height:1.5}
+.modeswitch{display:flex;gap:6px;background:rgba(255,255,255,.1);border-radius:9px;padding:3px}
+.modeswitch button{background:none;border:none;color:#b9c6e2;font-size:11.5px;font-weight:700;
+  padding:5px 11px;border-radius:7px;cursor:pointer}
+.modeswitch button.on{background:#fff;color:var(--brandbg)}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap brandrow" style="max-width:none;padding:0 20px">
+    <div class="logo">HP</div>
+    <div>
+      <h1>新卒採用AIペルソナ「の声」<span style="font-size:12px;font-weight:600;opacity:.7"> ／ HR Persona Voice AI</span></h1>
+      <div class="sub">チェック選択型ペルソナ ＆ 顔写真・分析生成アプリ<span class="chip" style="margin-left:8px">Prototype v0.5</span></div>
+    </div>
+    <div class="tags">
+      <div class="modeswitch">
+        <button type="button" data-mode="dash" class="on">ダッシュボード</button>
+        <button type="button" data-mode="wiz">3ステップ版</button>
+      </div>
+      <span class="chip" id="srvChip">確認中…</span>
+      <button class="iconbtn" id="themeBtn" type="button">ダーク</button>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="nav" id="nav"></nav>
+  <div class="viewhost">
+
+  <!-- ============ ダッシュボード ============ -->
+  <section id="vDash">
+    <div class="dash">
+
+      <!-- 左：条件パネル -->
+      <div class="col">
+        <div class="colh">
+          <h3>プレミアム・ペルソナ・クリエイター</h3>
+          <p>複数のカテゴリーのチェックリストを使用して、最適な人材像を定義してください。</p>
+        </div>
+        <div class="cbox">
+          <b>自社情報</b>
+          <div style="margin-bottom:10px">
+            <label class="f" for="cUrl">企業サイトのURL <span style="font-weight:400;color:var(--ink-3)">貼り付けると自動で読み取ります</span></label>
+            <div style="display:flex;gap:6px">
+              <input type="text" id="cUrl" placeholder="https://example.co.jp/company/">
+              <button class="btn ghost sm" id="readUrl" type="button" style="flex:none;white-space:nowrap">読み取る</button>
+            </div>
+            <p class="hint" id="urlStat" style="margin:5px 0 0;font-size:10.5px;line-height:1.6"></p>
+            <details style="margin-top:5px">
+              <summary style="font-size:10.5px;color:var(--ink-3);cursor:pointer">URLで読み取れない場合はこちら（テキストを貼り付ける）</summary>
+              <textarea id="cPaste" rows="3" placeholder="会社概要ページの本文をそのまま貼り付けてください" style="margin-top:6px;font-size:12px;padding:7px 9px;border-radius:7px"></textarea>
+              <button class="btn ghost sm" id="readPaste" type="button" style="margin-top:6px">貼り付けたテキストから読み取る</button>
+            </details>
+          </div>
+          <div class="mini">
+            <div style="grid-column:1/-1"><label class="f" for="cName">会社名</label><input type="text" id="cName" placeholder="例：株式会社〇〇"></div>
+            <div><label class="f" for="cInd">業種</label><select id="cInd"></select></div>
+            <div><label class="f" for="cJob">募集職種</label><select id="cJob"></select></div>
+            <div><label class="f" for="cArea">勤務地</label><input type="text" id="cArea" placeholder="例：東京都"></div>
+            <div><label class="f" for="cSize">規模</label><select id="cSize"></select></div>
+            <div style="grid-column:1/-1"><label class="f" for="cGrad">対象</label><select id="cGrad"></select></div>
+            <div style="grid-column:1/-1"><label class="f" for="cStrength">自社の強み・独自性</label>
+              <textarea id="cStrength" rows="2" placeholder="例：〇〇というビジョンを掲げ、新規事業をゼロから立ち上げ中。" style="font-size:12.5px;padding:7px 9px;border-radius:7px"></textarea></div>
+          </div>
+        </div>
+        <div id="formHost"></div>
+        <button class="btn genbtn" id="genBtn" type="button">ペルソナを生成</button>
+        <p class="hint" id="genHint" style="margin:8px 0 0;text-align:center"></p>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn ghost sm" id="presetBtn" type="button" style="flex:1;justify-content:center">サンプル条件</button>
+          <button class="btn ghost sm" id="clearBtn" type="button" style="flex:1;justify-content:center">クリア</button>
+        </div>
+      </div>
+
+      <!-- 中：生成ペルソナ -->
+      <div class="col">
+        <div class="colh"><h3>生成されたペルソナ</h3>
+          <p>同一条件から5パターンを生成。マッチ度は自社要件との適合度です。</p></div>
+        <div class="phbar noprint">
+          <button class="btn primary sm" id="aiBtn" type="button" data-needai>AIでペルソナ＋画像を生成</button>
+          <select id="aiCount" style="width:auto;padding:6px 9px;font-size:12.5px;border-radius:8px">
+            <option value="1">1人</option><option value="3" selected>3人</option><option value="5">5人</option>
+          </select>
+          <button class="btn ghost sm" id="imgBtn" type="button">この人の顔写真を生成</button>
+          <button class="btn ghost sm" id="allImgBtn" type="button">全員の顔写真を生成</button>
+          <button class="btn ghost sm" id="promptBtn" type="button">画像プロンプトを確認</button>
+          <button class="btn ghost sm" id="expJson" type="button">personas.json</button>
+          <label class="btn ghost sm" for="impPhotos" style="cursor:pointer">画像を読み込む</label>
+          <input type="file" id="impPhotos" accept="image/*" multiple class="hidden">
+          <span class="hint" id="aiStat" style="flex-basis:100%;font-size:11.5px;line-height:1.6"></span>
+          <span class="hint" id="photoStat" style="flex-basis:100%;font-size:11px"></span>
+        </div>
+        <div id="promptBox" class="hidden" style="margin-bottom:12px">
+          <div class="viz">
+            <h5>生成プロンプト（dry-run）</h5>
+            <p class="note" id="promptCost"></p>
+            <textarea id="promptDump" rows="10" readonly style="font-size:11px;line-height:1.6;font-family:ui-monospace,monospace"></textarea>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn ghost sm" id="copyPrompt" type="button">コピー</button>
+              <button class="btn ghost sm" id="closePrompt" type="button">閉じる</button>
+            </div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:172px minmax(0,372px);gap:12px;align-items:start;justify-content:start" id="dashBody">
+          <div class="cands" id="cands"></div>
+          <div id="heroHost"></div>
+        </div>
+      </div>
+
+      <!-- 右：分析ラボ -->
+      <div class="col">
+        <div class="colh"><h3>分析ラボ</h3><p>採用要件とスカウト文をAIで分析します。</p></div>
+        <div class="lab">
+          <h5>AI 要件診断</h5>
+          <p style="font-size:11.5px;color:var(--ink-3);margin:0 0 9px;line-height:1.7">
+            選択した条件の矛盾・抜け・市場とのズレをAIが指摘します。</p>
+          <button class="btn ghost sm" id="reqBtn" type="button" data-needkey style="width:100%;justify-content:center">AIで採用要件を分析</button>
+          <div id="reqHost" style="margin-top:10px"></div>
+        </div>
+        <div id="labHost"></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ ウィザード（3ステップ） ============ -->
+  <section id="vWiz" class="hidden">
+    <nav class="stepper"><div class="wrap steps" id="steps"></div></nav>
+    <main class="wrap">
+      <section id="s1">
+        <div class="sect-h"><h2>STEP 1 ／ 項目チェック</h2>
+          <p>採用ターゲットの条件をチェックボックスで選ぶだけ。<b id="selcount" style="color:var(--s1)"></b></p></div>
+        <div class="card pad"><p class="hint" style="margin:0 0 14px">条件はダッシュボードと共通です。左のダッシュボードで選択した内容がそのまま反映されます。</p>
+          <div id="wizMirror"></div></div>
+        <div class="actionbar noprint"><div class="wrap">
+          <button class="btn primary" id="genBtn2" type="button">この条件でペルソナを生成する</button>
+          <span class="hint" id="genHint2"></span></div></div>
+      </section>
+
+      <section id="s2" class="hidden">
+        <div class="sect-h"><h2>STEP 2 ／ 顔写真 ＆ AI分析</h2>
+          <p>選択条件から、学生像・顔写真・生の声（Voice）・心理傾向を生成しました。</p></div>
+        <div class="card pcard" id="pcard"></div>
+        <div class="grid2" style="margin-top:18px">
+          <div class="card pad" id="vizRadarHost"></div>
+          <div class="card pad" id="vizBarHost"></div>
+        </div>
+        <div class="card pad" style="margin-top:18px" id="marketHost"></div>
+        <div class="actionbar noprint"><div class="wrap">
+          <button class="btn primary" id="toS3" type="button">STEP 3：スカウト文・訴求を生成する</button>
+          <button class="btn ghost sm" id="regenBtn" type="button">別パターンを生成</button>
+          <button class="btn ghost sm" id="backS1" type="button">条件を修正</button>
+        </div></div>
+      </section>
+
+      <section id="s3" class="hidden">
+        <div class="sect-h"><h2>STEP 3 ／ クリエイティブ出力</h2>
+          <p>このペルソナに最も刺さるスカウト文面・キャッチコピー・面接質問を生成しました。</p></div>
+        <div id="creativeHost" style="display:flex;flex-direction:column;gap:18px"></div>
+        <div class="out" style="margin-top:18px">
+          <header><h4>AI 添削（スカウト文）</h4><span class="k">サーバー経由でOpenAIに問い合わせます</span>
+            <button class="btn ghost sm noprint" id="critBtn" type="button" data-needkey>AIで添削する</button></header>
+          <div class="body" id="critHost"><p class="hint" style="margin:0">「AIで添削する」を押すと、本文を引用しながら改善点を指摘します。</p></div>
+        </div>
+        <div class="actionbar noprint"><div class="wrap">
+          <button class="btn primary" id="printBtn" type="button">ペルソナシートを印刷 / PDF保存</button>
+          <button class="btn ghost sm" id="dlBtn" type="button">JSONで書き出し</button>
+          <button class="btn ghost sm" id="backS2" type="button">ペルソナに戻る</button>
+        </div></div>
+      </section>
+    </main>
+  </section>
+
+  <!-- ============ 設定 ============ -->
+  <section id="vSet" class="hidden">
+    <main class="wrap" style="padding:26px 20px 60px;max-width:900px;margin:0">
+      <div class="sect-h"><h2>設定 ／ 接続状況</h2>
+        <p>APIキーはサーバー（Node.js）の環境変数からのみ読み込まれます。この画面から入力する項目はありません。</p></div>
+
+      <div class="card pad">
+        <div class="eyebrow">接続状況</div>
+        <p id="srvBadge" style="font-size:13px;line-height:1.9;margin:6px 0 0">確認中…</p>
+        <div style="margin-top:14px"><button class="btn ghost sm" id="recheckBtn" type="button">再確認</button></div>
+      </div>
+
+      <div class="card pad" style="margin-top:18px">
+        <div class="sect-h" style="margin-bottom:12px"><h2 style="font-size:17px">起動方法</h2>
+          <p>キーはシェルの環境変数で渡します。ソースコードには一切書きません。</p></div>
+<pre style="background:var(--surface-1);border:1px solid var(--hair);border-radius:10px;padding:14px;font-size:12.5px;line-height:1.9;overflow-x:auto;margin:0"># 1) 顔写真の生成（機能3）
+export GEMINI_API_KEY="AIza..."     # Nano Banana / https://aistudio.google.com/apikey
+
+# 2) ペルソナ本文とAI診断（機能1・2）— 未設定ならルールベースで動作
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# 3) 起動
+node standalone/server.js           # = npm run portraits:serve
+# → http://localhost:8787
+
+# 課金前にプロンプトを確認する（APIを叩きません）
+npm run portraits:dry-run</pre>
+        <p class="hint" style="margin:12px 0 0;line-height:1.8">
+          キーを設定せずに起動した場合も、アプリは起動します。顔写真は<b>事前生成プール</b>
+          （<code>standalone/public/personas/pool/</code>）があればそれを、無ければ
+          <b>プレースホルダ</b>を表示し、ペルソナ本文はルールベース生成に切り替わります。<br>
+          一度生成した写真はプロンプトのハッシュでキャッシュされるため、同じペルソナを
+          何度表示しても課金は初回の1回だけです。
+        </p>
+      </div>
+
+      <div class="card pad" style="margin-top:18px">
+        <div class="sect-h" style="margin-bottom:12px"><h2 style="font-size:17px">顔写真を事前に焼いておく</h2>
+          <p>APIキーが無い環境でも顔写真つきで見せたい場合、先に生成してコミットしておきます。</p></div>
+<pre style="background:var(--surface-1);border:1px solid var(--hair);border-radius:10px;padding:14px;font-size:12.5px;line-height:1.9;overflow-x:auto;margin:0"># まずプロンプトと概算費用を確認（APIを叩きません）
+node standalone/bin/generate-pool.mjs --dry-run
+
+# 1枚だけ試して作風を見る
+node standalone/bin/generate-pool.mjs --only male-01
+
+# 問題なければ12枚まとめて
+node standalone/bin/generate-pool.mjs --count 12</pre>
+        <p class="hint" style="margin:12px 0 0;line-height:1.8">
+          出力先は <code>standalone/public/personas/pool/</code>。サーバーは性別が合うものを
+          順に割り当てます。<code>--wardrobe casual</code> で私服、<code>--scene office</code> で
+          オフィス背景になります。
+        </p>
+      </div>
+
+      <div class="card pad" style="margin-top:18px">
+        <div class="eyebrow">生成した顔写真の扱い</div>
+        <div class="warnbox" style="margin-top:8px">
+          ・生成画像は<b>ペルソナ・デモ用</b>です。実在の内定者・社員・顧客であるかのように提示しないでください。<br>
+          ・社外に出す場合は「※画像はイメージです。実在の人物ではありません」の注記を入れてください。<br>
+          ・Gemini の生成画像には SynthID の不可視ウォーターマークが入ります（無効化不可・画質への影響なし）。
+        </div>
+      </div>
+    </main>
+  </section>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+/* ============================================================
+   高精細ポートレート生成（SVG）— 証明写真風バストアップ
+   人物画の標準比率に基づく：
+     頭高 = 頭幅 / 0.74 ／ 目は頭頂〜顎の中点 ／
+     生え際〜眉〜鼻底〜顎 を三等分 ／ 顔幅 = 目5個分
+   ============================================================ */
+function hash(str){let h=1779033703^str.length;for(let i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353);h=h<<13|h>>>19}return h>>>0}
+function rng(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const pick=(r,arr)=>arr[Math.floor(r()*arr.length)];
+const rr=(r,a,b)=>a+r()*(b-a);
+
+const SKIN_SETS=[
+  {base:"#f4d8c0",lit:"#fdeddc",sh:"#ddac89",deep:"#c08f6e",blush:"#e2947f"},
+  {base:"#efcfb2",lit:"#fbe6d1",sh:"#d5a37e",deep:"#b8825f",blush:"#d98a75"},
+  {base:"#e6c1a0",lit:"#f5dbc7",sh:"#c9946f",deep:"#a97655",blush:"#cd7d69"},
+  {base:"#f8e0cd",lit:"#fff2e6",sh:"#e4b997",deep:"#c99873",blush:"#e59c8a"},
+  {base:"#dcb08c",lit:"#eecaac",sh:"#bd8760",deep:"#9c6b48",blush:"#c06f5c"},
+  {base:"#f1cdae",lit:"#fce3cc",sh:"#d6a077",deep:"#b8805a",blush:"#d98a72"}
+];
+const HAIR_SETS=[
+  {base:"#241a15",lit:"#4d3a2c",deep:"#100b08"},
+  {base:"#31231a",lit:"#5b4231",deep:"#180f09"},
+  {base:"#1a1411",lit:"#3c302a",deep:"#0a0807"},
+  {base:"#453022",lit:"#705037",deep:"#271910"}
+];
+const BG_SETS=[["#e8eef7","#bfcde3"],["#eef1f0","#c9d5d2"],["#ecebf4","#cbc8dd"],["#e7f0ed","#c1d5cf"],["#f2eee9","#d4ccc2"]];
+const SUIT_SETS=[
+  {base:"#242a39",lit:"#3a4259",deep:"#151923"},
+  {base:"#2b3040",lit:"#434a61",deep:"#181b25"},
+  {base:"#1e2b3f",lit:"#324464",deep:"#111926"},
+  {base:"#322f3b",lit:"#4b4758",deep:"#1d1b23"}
+];
+const TIE_SETS=["#8b2f3b","#2e4d8b","#474689","#2d6858","#78406a","#3f6f8b"];
+
+let __pid=0;
+function portraitSVG(seed, gender){
+  const r=rng(seed>>>0);
+  const g = (gender==="m"||gender==="f") ? gender : (r()<0.5?"m":"f");
+  const S=pick(r,SKIN_SETS), H=pick(r,HAIR_SETS), BG=pick(r,BG_SETS), SU=pick(r,SUIT_SETS);
+  const tie=pick(r,TIE_SETS);
+  const glasses = r() < (g==="m"?0.26:0.16);
+  const hairStyle = Math.floor(r()*(g==="m"?4:5));
+  const id="p"+(seed>>>0).toString(36)+"x"+(++__pid);
+  const u=n=>`url(#${id}${n})`;
+  const cx=200;
+
+  /* ---- 骨格比率 ---- */
+  const hw    = g==="m" ? rr(r,70,75) : rr(r,65,70);     // 頬骨の半幅
+  const crownY= 76;
+  const headH = hw*2/ (g==="m"? rr(r,0.735,0.765) : rr(r,0.715,0.745));
+  const chinY = crownY + headH;
+  const jw    = hw * (g==="m" ? rr(r,0.74,0.79) : rr(r,0.69,0.74)); // 下顎の半幅
+  const hairY = crownY + headH*(g==='m'? rr(r,0.235,0.275) : rr(r,0.285,0.315)); // 生え際
+  const third = (chinY-hairY)/3;
+  const browY = hairY + third;
+  const noseB = browY + third;
+  const eyeY  = browY + third*rr(r,0.30,0.36);
+  const mouthY= noseB + (chinY-noseB)*0.34;
+  const eyeW  = hw*2/5/2;                                 // 目の半幅（顔幅＝目5個分）
+  const eyeGap= eyeW*2;                                   // 目の中心間 = 目幅2つ分
+  const eyeH  = eyeW*(g==="m"? rr(r,0.40,0.46) : rr(r,0.46,0.53));
+  const browTh= g==="m" ? rr(r,7,8.6) : rr(r,5,6.4);
+  const mouthW= (g==="m"? rr(r,0.32,0.36) : rr(r,0.29,0.33))*hw*2/2;
+  const smile = rr(r,2.0,4.6);
+  const neckW = hw*rr(r,0.50,0.56);
+  const neckTop=chinY-26, neckBot=chinY+42;
+  const shoulderY=neckBot+6;
+
+  /* ---- 頭部輪郭 ---- */
+  const face = `M ${cx} ${crownY}
+    C ${cx-hw*0.58} ${crownY} ${cx-hw} ${crownY+headH*0.20} ${cx-hw} ${browY-6}
+    C ${cx-hw} ${browY+third*0.85} ${cx-hw*0.97} ${noseB+8} ${cx-jw} ${noseB+headH*0.09}
+    C ${cx-jw*0.93} ${chinY-headH*0.10} ${cx-jw*0.52} ${chinY-2} ${cx} ${chinY}
+    C ${cx+jw*0.52} ${chinY-2} ${cx+jw*0.93} ${chinY-headH*0.10} ${cx+jw} ${noseB+headH*0.09}
+    C ${cx+hw*0.97} ${noseB+8} ${cx+hw} ${browY+third*0.85} ${cx+hw} ${browY-6}
+    C ${cx+hw} ${crownY+headH*0.20} ${cx+hw*0.58} ${crownY} ${cx} ${crownY} Z`;
+
+  /* ---- 髪 ---- */
+  const HW=hw+9, HT=crownY-15, sideY=eyeY+18;
+  const part = rr(r,-0.35,0.35);               // 分け目の偏り
+  const hlY  = hairY;
+  /* 女性用：サイドが耳を覆って下まで落ちる */
+  const frontHair=(dip)=>`M ${cx} ${HT}
+    C ${cx-HW*0.62} ${HT} ${cx-HW-1} ${crownY+headH*0.20} ${cx-HW} ${sideY}
+    L ${cx-hw+3} ${sideY}
+    C ${cx-hw+5} ${hlY+22} ${cx-hw+9} ${hlY+2} ${cx-hw+20} ${hlY+dip*0.4}
+    C ${cx-hw*0.5+part*30} ${hlY-dip} ${cx+hw*0.3+part*30} ${hlY-dip*0.75} ${cx+hw-20} ${hlY+dip*0.4}
+    C ${cx+hw-9} ${hlY+2} ${cx+hw-5} ${hlY+22} ${cx+hw-3} ${sideY}
+    L ${cx+HW} ${sideY}
+    C ${cx+HW+1} ${crownY+headH*0.20} ${cx+HW*0.62} ${HT} ${cx} ${HT} Z`;
+  /* 男性用：もみあげが眉〜耳上で終わり、耳が見える */
+  const mFrontHair=(dip,sb)=>`M ${cx} ${HT}
+    C ${cx-HW*0.62} ${HT} ${cx-HW-1} ${crownY+headH*0.20} ${cx-HW+1} ${sb}
+    C ${cx-HW+5} ${sb+9} ${cx-hw-1} ${sb+7} ${cx-hw+2} ${sb-4}
+    C ${cx-hw+4} ${hlY+20} ${cx-hw+8} ${hlY+2} ${cx-hw+19} ${hlY+dip*0.4}
+    C ${cx-hw*0.5+part*30} ${hlY-dip} ${cx+hw*0.3+part*30} ${hlY-dip*0.75} ${cx+hw-19} ${hlY+dip*0.4}
+    C ${cx+hw-8} ${hlY+2} ${cx+hw-4} ${hlY+20} ${cx+hw-2} ${sb-4}
+    C ${cx+hw+1} ${sb+7} ${cx+HW-5} ${sb+9} ${cx+HW-1} ${sb}
+    C ${cx+HW+1} ${crownY+headH*0.20} ${cx+HW*0.62} ${HT} ${cx} ${HT} Z`;
+
+  let hairBack="", hairFront="", strands="";
+  if(g==="m"){
+    const dip = [7,12,-8,5][hairStyle];                 // 生え際の落ち込み量（負＝上げ）
+    const sb  = [browY+4, browY+12, browY-4, browY+2][hairStyle]; // もみあげの終端
+    hairFront=mFrontHair(dip,sb);
+    // 短い後頭部のシルエット（耳の後ろ）
+    hairBack=`<path d="M ${cx} ${HT}
+      C ${cx-HW-3} ${HT} ${cx-HW-4} ${crownY+headH*0.24} ${cx-HW-2} ${browY+16}
+      C ${cx-HW+1} ${browY+30} ${cx-hw+4} ${browY+34} ${cx-hw+6} ${browY+26}
+      L ${cx+hw-6} ${browY+26} C ${cx+hw-4} ${browY+34} ${cx+HW-1} ${browY+30} ${cx+HW+2} ${browY+16}
+      C ${cx+HW+4} ${crownY+headH*0.24} ${cx+HW+3} ${HT} ${cx} ${HT} Z"/>`;
+    strands=`<path d="M ${cx-hw+21} ${hlY+2} C ${cx-hw*0.4+part*30} ${hlY-dip-8} ${cx+hw*0.3+part*30} ${hlY-dip-2} ${cx+hw-21} ${hlY+2}"
+      stroke="${H.lit}" stroke-width="3" fill="none" opacity=".42" stroke-linecap="round"/>
+      <path d="M ${cx-HW+8} ${crownY+32} C ${cx-hw*0.6} ${crownY+2} ${cx+hw*0.2} ${crownY} ${cx+HW-12} ${crownY+28}"
+      stroke="${H.lit}" stroke-width="2.4" fill="none" opacity=".3" stroke-linecap="round"/>`;
+  } else {
+    const dip=[12,8,14,12,10][hairStyle];
+    hairFront=frontHair(dip);
+    strands=`<path d="M ${cx-hw+22} ${hlY+2} C ${cx-hw*0.4+part*30} ${hlY-dip-6} ${cx+hw*0.3+part*30} ${hlY-dip} ${cx+hw-22} ${hlY+2}"
+      stroke="${H.lit}" stroke-width="3.2" fill="none" opacity=".45" stroke-linecap="round"/>`;
+    if(hairStyle===0||hairStyle===3){ // ロング
+      const L=440;
+      hairBack=`<path d="M ${cx} ${HT-4}
+        C ${cx-HW-12} ${HT-4} ${cx-HW-16} ${crownY+headH*0.24} ${cx-HW-14} ${eyeY+30}
+        C ${cx-HW-20} ${L-140} ${cx-HW-6} ${L-40} ${cx-HW-10} ${L}
+        L ${cx-HW+26} ${L} C ${cx-HW+18} ${L-120} ${cx-HW+8} ${eyeY+70} ${cx-hw+2} ${eyeY+6}
+        L ${cx+hw-2} ${eyeY+6} C ${cx+HW-8} ${eyeY+70} ${cx+HW-18} ${L-120} ${cx+HW-26} ${L}
+        L ${cx+HW+10} ${L} C ${cx+HW+6} ${L-40} ${cx+HW+20} ${L-140} ${cx+HW+14} ${eyeY+30}
+        C ${cx+HW+16} ${crownY+headH*0.24} ${cx+HW+12} ${HT-4} ${cx} ${HT-4} Z"/>`;
+      strands+=`<path d="M ${cx-HW-6} ${eyeY+50} C ${cx-HW-14} ${eyeY+130} ${cx-HW-6} ${L-90} ${cx-HW-2} ${L}"
+        stroke="${H.lit}" stroke-width="3" fill="none" opacity=".28"/>
+        <path d="M ${cx+HW+6} ${eyeY+50} C ${cx+HW+14} ${eyeY+130} ${cx+HW+6} ${L-90} ${cx+HW+2} ${L}"
+        stroke="${H.lit}" stroke-width="3" fill="none" opacity=".28"/>`;
+    } else if(hairStyle===1){ // ボブ
+      const B=eyeY+112;
+      hairBack=`<path d="M ${cx} ${HT-2}
+        C ${cx-HW-10} ${HT-2} ${cx-HW-14} ${crownY+headH*0.24} ${cx-HW-13} ${eyeY+40}
+        C ${cx-HW-13} ${B-14} ${cx-HW-2} ${B} ${cx-HW+20} ${B+3}
+        L ${cx+HW-20} ${B+3} C ${cx+HW+2} ${B} ${cx+HW+13} ${B-14} ${cx+HW+13} ${eyeY+40}
+        C ${cx+HW+14} ${crownY+headH*0.24} ${cx+HW+10} ${HT-2} ${cx} ${HT-2} Z"/>`;
+    } else if(hairStyle===2){ // まとめ髪（お団子）
+      hairBack=`<ellipse cx="${cx}" cy="${crownY-6}" rx="${hw*0.46}" ry="${hw*0.34}" fill="${H.deep}"/>
+        <ellipse cx="${cx}" cy="${crownY+30}" rx="${HW}" ry="${headH*0.30}" fill="${H.base}"/>`;
+    } else { // ハーフアップ
+      hairBack=`<path d="M ${cx} ${HT-2}
+        C ${cx-HW-8} ${HT-2} ${cx-HW-12} ${crownY+headH*0.24} ${cx-HW-11} ${eyeY+30}
+        C ${cx-HW-8} ${eyeY+96} ${cx-HW+6} ${eyeY+126} ${cx-hw+8} ${eyeY+128}
+        L ${cx+hw-8} ${eyeY+128} C ${cx+HW-6} ${eyeY+126} ${cx+HW+8} ${eyeY+96} ${cx+HW+11} ${eyeY+30}
+        C ${cx+HW+12} ${crownY+headH*0.24} ${cx+HW+8} ${HT-2} ${cx} ${HT-2} Z"/>`;
+    }
+  }
+
+  /* ---- パーツ ---- */
+  const eye=(sx)=>{
+    const ex=cx+sx*eyeGap, k=sx>0?1:0, ir=eyeH*1.02;
+    const lid=`M ${ex-eyeW} ${eyeY+eyeH*0.15} Q ${ex-eyeW*0.42} ${eyeY-eyeH*1.55} ${ex+eyeW*0.18} ${eyeY-eyeH*0.95}
+               Q ${ex+eyeW*0.92} ${eyeY-eyeH*0.35} ${ex+eyeW} ${eyeY+eyeH*0.08}
+               Q ${ex+eyeW*0.42} ${eyeY+eyeH*1.32} ${ex-eyeW*0.42} ${eyeY+eyeH*1.02} Z`;
+    return `<g>
+      <clipPath id="${id}ec${k}"><path d="${lid}"/></clipPath>
+      <path d="${lid}" fill="#f9f5f1"/>
+      <g clip-path="url(#${id}ec${k})">
+        <ellipse cx="${ex}" cy="${eyeY-eyeH*0.9}" rx="${eyeW*1.2}" ry="${eyeH}" fill="${S.deep}" opacity=".22"/>
+        <circle cx="${ex-sx*1.2}" cy="${eyeY}" r="${ir}" fill="${u('ir')}"/>
+        <circle cx="${ex-sx*1.2}" cy="${eyeY}" r="${ir*0.44}" fill="#0d0908"/>
+        <circle cx="${ex-sx*1.2-ir*0.36}" cy="${eyeY-ir*0.4}" r="${ir*0.24}" fill="#fff" opacity=".95"/>
+        <circle cx="${ex-sx*1.2+ir*0.32}" cy="${eyeY+ir*0.3}" r="${ir*0.12}" fill="#fff" opacity=".5"/>
+      </g>
+      <path d="M ${ex-eyeW-1} ${eyeY+eyeH*0.12} Q ${ex-eyeW*0.42} ${eyeY-eyeH*1.7} ${ex+eyeW*0.18} ${eyeY-eyeH*1.05}
+               Q ${ex+eyeW*0.95} ${eyeY-eyeH*0.45} ${ex+eyeW+1} ${eyeY+eyeH*0.05}"
+            fill="none" stroke="${H.deep}" stroke-width="${g==="f"?3.2:2.7}" stroke-linecap="round"/>
+      <path d="M ${ex-eyeW*0.45} ${eyeY+eyeH*1.22} Q ${ex+eyeW*0.15} ${eyeY+eyeH*1.5} ${ex+eyeW*0.9} ${eyeY+eyeH*0.5}"
+            fill="none" stroke="${S.deep}" stroke-width="1.1" opacity=".5" stroke-linecap="round"/>
+      <path d="M ${ex-eyeW*0.8} ${eyeY-eyeH*1.9} Q ${ex+eyeW*0.05} ${eyeY-eyeH*2.7} ${ex+eyeW*0.9} ${eyeY-eyeH*1.5}"
+            fill="none" stroke="${S.deep}" stroke-width="1" opacity=".32" stroke-linecap="round"/>
+    </g>`;
+  };
+  const brow=(sx)=>{
+    const bx=cx+sx*eyeGap;
+    return `<path d="M ${bx-eyeW*1.2} ${browY+5}
+      Q ${bx-eyeW*0.25} ${browY-browTh*0.9} ${bx+eyeW*1.0} ${browY+1}
+      Q ${bx-eyeW*0.2} ${browY+browTh*0.5} ${bx-eyeW*1.2} ${browY+5} Z" fill="${H.base}" opacity=".9"/>`;
+  };
+
+  const collar = g==="m"
+    ? `<path d="M ${cx-neckW-4} ${shoulderY-6} L ${cx} ${shoulderY+34} L ${cx+neckW+4} ${shoulderY-6}
+         L ${cx+neckW-6} ${shoulderY-14} L ${cx} ${shoulderY+18} L ${cx-neckW+6} ${shoulderY-14} Z" fill="#fcfcfb"/>
+       <path d="M ${cx-11} ${shoulderY+22} L ${cx+11} ${shoulderY+22} L ${cx+15} ${shoulderY+42} L ${cx} ${shoulderY+54} L ${cx-15} ${shoulderY+42} Z" fill="${tie}"/>
+       <path d="M ${cx-13} ${shoulderY+54} L ${cx+13} ${shoulderY+54} L ${cx+17} 440 L ${cx-17} 440 Z" fill="${tie}" opacity=".9"/>`
+    : `<path d="M ${cx-neckW-8} ${shoulderY-6} L ${cx} ${shoulderY+44} L ${cx+neckW+8} ${shoulderY-6}
+         L ${cx+neckW-4} ${shoulderY-16} L ${cx} ${shoulderY+26} L ${cx-neckW+4} ${shoulderY-16} Z" fill="#fcfcfb"/>`;
+
+  return `<svg viewBox="0 0 400 440" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AI生成のポートレート（実在しません）">
+<defs>
+  <radialGradient id="${id}bg" cx="50%" cy="30%" r="80%">
+    <stop offset="0" stop-color="${BG[0]}"/><stop offset="1" stop-color="${BG[1]}"/></radialGradient>
+  <linearGradient id="${id}sk" x1="0.1" y1="0" x2="0.55" y2="1">
+    <stop offset="0" stop-color="${S.lit}"/><stop offset=".5" stop-color="${S.base}"/><stop offset="1" stop-color="${S.sh}"/></linearGradient>
+  <radialGradient id="${id}bl" cx="50%" cy="50%" r="50%">
+    <stop offset="0" stop-color="${S.blush}" stop-opacity=".40"/><stop offset="1" stop-color="${S.blush}" stop-opacity="0"/></radialGradient>
+  <linearGradient id="${id}hr" x1="0.15" y1="0" x2="0.85" y2="1">
+    <stop offset="0" stop-color="${H.lit}"/><stop offset=".42" stop-color="${H.base}"/><stop offset="1" stop-color="${H.deep}"/></linearGradient>
+  <linearGradient id="${id}su" x1="0" y1="0" x2="0.35" y2="1">
+    <stop offset="0" stop-color="${SU.lit}"/><stop offset=".5" stop-color="${SU.base}"/><stop offset="1" stop-color="${SU.deep}"/></linearGradient>
+  <radialGradient id="${id}ir" cx="48%" cy="40%" r="60%">
+    <stop offset="0" stop-color="#7d5c44"/><stop offset=".55" stop-color="#4a3526"/><stop offset="1" stop-color="#1f1610"/></radialGradient>
+  <filter id="${id}soft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="8"/></filter>
+  <filter id="${id}soft2" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="3"/></filter>
+  <filter id="${id}grain" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" result="n"/>
+    <feColorMatrix in="n" type="saturate" values="0"/>
+    <feComponentTransfer><feFuncA type="linear" slope="0.05"/></feComponentTransfer></filter>
+  <clipPath id="${id}frame"><rect width="400" height="440"/></clipPath>
+  <clipPath id="${id}face"><path d="${face}"/></clipPath>
+</defs>
+<g clip-path="url(#${id}frame)">
+  <rect width="400" height="440" fill="${u('bg')}"/>
+  <ellipse cx="200" cy="140" rx="190" ry="160" fill="#fff" opacity=".18" filter="${u('soft')}"/>
+  <ellipse cx="200" cy="430" rx="200" ry="90" fill="#000" opacity=".05" filter="${u('soft')}"/>
+
+  ${hairBack?`<g fill="${u('hr')}">${hairBack}</g>`:""}
+
+  <!-- 肩・スーツ -->
+  <path d="M 200 ${shoulderY-4} C 122 ${shoulderY+4} 66 ${shoulderY+44} 54 440 L 346 440
+           C 334 ${shoulderY+44} 278 ${shoulderY+4} 200 ${shoulderY-4} Z" fill="${u('su')}"/>
+  <path d="M 200 ${shoulderY-2} L ${cx-46} ${shoulderY+12} L ${cx-30} 440 L ${cx+30} 440 L ${cx+46} ${shoulderY+12} Z" fill="#f8f8f6"/>
+  <path d="M ${cx-46} ${shoulderY+12} L ${cx} ${shoulderY+44} L ${cx-26} 440 L ${cx-96} 440 Z" fill="${u('su')}"/>
+  <path d="M ${cx+46} ${shoulderY+12} L ${cx} ${shoulderY+44} L ${cx+26} 440 L ${cx+96} 440 Z" fill="${u('su')}"/>
+  <path d="M ${cx-46} ${shoulderY+12} L ${cx} ${shoulderY+44}" stroke="${SU.deep}" stroke-width="1.5" opacity=".65" fill="none"/>
+  <path d="M ${cx+46} ${shoulderY+12} L ${cx} ${shoulderY+44}" stroke="${SU.deep}" stroke-width="1.5" opacity=".65" fill="none"/>
+  ${collar}
+
+  <!-- 首 -->
+  <path d="M ${cx-neckW} ${neckTop} L ${cx-neckW-2} ${neckBot} C ${cx-neckW*0.5} ${neckBot+12} ${cx+neckW*0.5} ${neckBot+12} ${cx+neckW+2} ${neckBot} L ${cx+neckW} ${neckTop} Z" fill="${S.base}"/>
+  <path d="M ${cx-neckW-1} ${neckTop-4} C ${cx-neckW*0.6} ${chinY+22} ${cx+neckW*0.6} ${chinY+22} ${cx+neckW+1} ${neckTop-4}
+           L ${cx+neckW+1} ${chinY+30} L ${cx-neckW-1} ${chinY+30} Z" fill="${S.deep}" opacity=".5" filter="${u('soft2')}"/>
+
+  <!-- 耳 -->
+  <ellipse cx="${cx-hw+1}" cy="${(browY+noseB)/2}" rx="${hw*0.135}" ry="${(noseB-browY)*0.52}" fill="${S.base}"/>
+  <ellipse cx="${cx+hw-1}" cy="${(browY+noseB)/2}" rx="${hw*0.135}" ry="${(noseB-browY)*0.52}" fill="${S.base}"/>
+  <path d="M ${cx-hw+3} ${browY+8} q -4 10 0 20" stroke="${S.deep}" stroke-width="1.5" fill="none" opacity=".55"/>
+  <path d="M ${cx+hw-3} ${browY+8} q 4 10 0 20" stroke="${S.deep}" stroke-width="1.5" fill="none" opacity=".55"/>
+
+  <!-- 顔 -->
+  <path d="${face}" fill="${u('sk')}"/>
+  <g clip-path="url(#${id}face)">
+    <ellipse cx="${cx-hw*0.82}" cy="${eyeY+24}" rx="${hw*0.34}" ry="${headH*0.30}" fill="${S.sh}" opacity=".6" filter="${u('soft')}"/>
+    <ellipse cx="${cx+hw*0.82}" cy="${eyeY+24}" rx="${hw*0.34}" ry="${headH*0.30}" fill="${S.sh}" opacity=".4" filter="${u('soft')}"/>
+    <ellipse cx="${cx-hw*0.1}" cy="${hairY+16}" rx="${hw*0.62}" ry="${headH*0.11}" fill="${S.lit}" opacity=".75" filter="${u('soft')}"/>
+    <ellipse cx="${cx}" cy="${chinY-14}" rx="${hw*0.34}" ry="${headH*0.07}" fill="${S.lit}" opacity=".5" filter="${u('soft')}"/>
+    <ellipse cx="${cx-eyeGap-2}" cy="${noseB-10}" rx="${hw*0.32}" ry="${headH*0.075}" fill="${u('bl')}" filter="${u('soft2')}"/>
+    <ellipse cx="${cx+eyeGap+2}" cy="${noseB-10}" rx="${hw*0.32}" ry="${headH*0.075}" fill="${u('bl')}" filter="${u('soft2')}"/>
+    <!-- 頬骨のハイライト -->
+    <ellipse cx="${cx-eyeGap-4}" cy="${eyeY+eyeH*3}" rx="${hw*0.24}" ry="${headH*0.05}" fill="${S.lit}" opacity=".45" filter="${u('soft2')}"/>
+    <ellipse cx="${cx+eyeGap+4}" cy="${eyeY+eyeH*3}" rx="${hw*0.24}" ry="${headH*0.05}" fill="${S.lit}" opacity=".45" filter="${u('soft2')}"/>
+
+    <!-- 鼻 -->
+    <path d="M ${cx-1.5} ${eyeY+eyeH*1.6} C ${cx-5} ${noseB-22} ${cx-8} ${noseB-9} ${cx-9} ${noseB-3}"
+          stroke="${S.sh}" stroke-width="4" fill="none" opacity=".45" filter="${u('soft2')}"/>
+    <ellipse cx="${cx+0.5}" cy="${noseB-4}" rx="${hw*0.13}" ry="${headH*0.028}" fill="${S.lit}" opacity=".6" filter="${u('soft2')}"/>
+    <ellipse cx="${cx-hw*0.115}" cy="${noseB-1}" rx="${hw*0.05}" ry="${hw*0.032}" fill="${S.deep}" opacity=".6"/>
+    <ellipse cx="${cx+hw*0.115}" cy="${noseB-1}" rx="${hw*0.05}" ry="${hw*0.032}" fill="${S.deep}" opacity=".6"/>
+    <path d="M ${cx-hw*0.15} ${noseB-4} q ${hw*0.15} ${hw*0.09} ${hw*0.3} 0" stroke="${S.sh}" stroke-width="1.6" fill="none" opacity=".45"/>
+
+    <!-- 口 -->
+    <ellipse cx="${cx}" cy="${mouthY-9}" rx="${mouthW*0.5}" ry="4" fill="${S.sh}" opacity=".25" filter="${u('soft2')}"/>
+    <path d="M ${cx-mouthW} ${mouthY} Q ${cx-mouthW*0.5} ${mouthY-6} ${cx-mouthW*0.14} ${mouthY-3.4}
+             Q ${cx} ${mouthY-6.2} ${cx+mouthW*0.14} ${mouthY-3.4}
+             Q ${cx+mouthW*0.5} ${mouthY-6} ${cx+mouthW} ${mouthY}
+             Q ${cx+mouthW*0.55} ${mouthY+smile+8} ${cx} ${mouthY+smile+9}
+             Q ${cx-mouthW*0.55} ${mouthY+smile+8} ${cx-mouthW} ${mouthY} Z"
+          fill="${g==="f"?"#c9736d":"#b56d67"}"/>
+    <path d="M ${cx-mouthW} ${mouthY} Q ${cx-mouthW*0.5} ${mouthY-5} ${cx-mouthW*0.14} ${mouthY-2.8}
+             Q ${cx} ${mouthY-5.4} ${cx+mouthW*0.14} ${mouthY-2.8}
+             Q ${cx+mouthW*0.5} ${mouthY-5} ${cx+mouthW} ${mouthY}"
+          fill="none" stroke="#8c4844" stroke-width="1.4" opacity=".7"/>
+    <ellipse cx="${cx}" cy="${mouthY+smile+3.5}" rx="${mouthW*0.36}" ry="2.2" fill="#fff" opacity=".22"/>
+    <ellipse cx="${cx}" cy="${mouthY+smile+15}" rx="${mouthW*0.55}" ry="4" fill="${S.sh}" opacity=".35" filter="${u('soft2')}"/>
+
+    ${g==="m"?`<path d="M ${cx-jw*0.92} ${noseB+headH*0.06} C ${cx-jw*0.8} ${chinY+2} ${cx+jw*0.8} ${chinY+2} ${cx+jw*0.92} ${noseB+headH*0.06}
+      L ${cx+jw} ${chinY+20} L ${cx-jw} ${chinY+20} Z" fill="#3a4a55" opacity=".13" filter="${u('soft2')}"/>`:""}
+    ${brow(-1)}${brow(1)}
+    ${eye(-1)}${eye(1)}
+  </g>
+
+  ${hairFront?`<path d="${hairFront}" fill="${u('hr')}"/>`:""}
+  ${strands}
+
+  ${glasses?`<g fill="none" stroke="#3b4048" stroke-width="2.4" opacity=".85">
+    <rect x="${cx-eyeGap-eyeW-8}" y="${eyeY-eyeH-11}" width="${(eyeW+8)*2}" height="${(eyeH+11)*2}" rx="${eyeH+6}"/>
+    <rect x="${cx+eyeGap-eyeW-8}" y="${eyeY-eyeH-11}" width="${(eyeW+8)*2}" height="${(eyeH+11)*2}" rx="${eyeH+6}"/>
+    <path d="M ${cx-eyeGap+eyeW+8} ${eyeY-2} h ${(eyeGap-eyeW-8)*2}"/>
+    <path d="M ${cx-eyeGap-eyeW-8} ${eyeY-4} l -${hw-eyeGap-eyeW-6} 5"/>
+    <path d="M ${cx+eyeGap+eyeW+8} ${eyeY-4} l ${hw-eyeGap-eyeW-6} 5"/></g>
+    <g opacity=".13" fill="#cfe3f5">
+    <rect x="${cx-eyeGap-eyeW-8}" y="${eyeY-eyeH-11}" width="${(eyeW+8)*2}" height="${(eyeH+11)*2}" rx="${eyeH+6}"/>
+    <rect x="${cx+eyeGap-eyeW-8}" y="${eyeY-eyeH-11}" width="${(eyeW+8)*2}" height="${(eyeH+11)*2}" rx="${eyeH+6}"/></g>`:""}
+
+  <rect width="400" height="440" filter="${u('grain')}"/>
+</g></svg>`;
+}
+
+/* Node からも読めるようにする（ブラウザでは module が未定義なので影響しない） */
+if (typeof module !== "undefined" && module.exports) { module.exports = { portraitSVG, hash, rng }; }
+
+</script>
+
+<script>
+/* =====================================================================
+   HR Persona Voice AI — prototype engine
+   ルールベース＋テンプレート合成でペルソナ / 顔写真 / クリエイティブを生成。
+   本番は LLM API + 画像生成API に差し替える想定（設計書 §4 参照）。
+   ===================================================================== */
+
+/* ---------- 選択肢マスタ ---------- */
+const IND = ["製造・メーカー","商社・卸売","IT・ソフトウェア","建設・不動産","人材・HR","医療・福祉","小売・サービス","金融・保険","運輸・物流","広告・メディア"];
+const JOBS = ["法人営業","企画営業","総合職（営業）","エンジニア","施工管理","生産技術","販売・接客","事務・管理","コンサルタント","マーケティング"];
+const SIZE = ["〜50名","51〜100名","101〜300名","301〜1,000名","1,001名〜"];
+const GRAD = ["27卒（大学3年・修士1年）","28卒（大学2年・修士0年）","26卒（既卒・第二新卒含む）"];
+
+const GROUPS = [
+  { id:"layer", label:"採用ターゲット層", type:"radio", req:true,
+    hint:"2:6:2 のどの層を狙うかでペルソナの言葉づかいが変わります",
+    opts:[
+      {v:"top",   t:"上位2割：幹部候補",  d:"非連続な成長・裁量を求める挑戦層"},
+      {v:"mid",   t:"中位6割：現場中核",  d:"堅実に力をつけたい多数派"},
+      {v:"stable",t:"下位2割：定着重視",  d:"安定・働きやすさを最優先"}
+    ]},
+  { id:"stance", label:"志向性・価値観", type:"check", req:true, min:2, max:5,
+    hint:"2〜5個。ペルソナの人格の骨格になります",
+    opts:[
+      {v:"growth", t:"成長志向"},{v:"stable",t:"安定志向"},{v:"social",t:"社会貢献志向"},
+      {v:"team",   t:"チーム志向"},{v:"solo", t:"個人裁量志向"},{v:"pro",  t:"専門性志向"},
+      {v:"wlb",    t:"WLB重視"},  {v:"zero", t:"ゼロイチ・挑戦"},{v:"logic",t:"論理・分析志向"},
+      {v:"empathy",t:"対人・共感志向"},{v:"local",t:"地元志向"},{v:"global",t:"グローバル志向"}
+    ]},
+  { id:"skill", label:"求める行動特性・スキル", type:"check", req:true, min:2, max:5,
+    hint:"2〜5個。面接の評価軸に直結します",
+    opts:[
+      {v:"init", t:"主体性・自走力"},{v:"grit",t:"継続力（やり抜く力）"},{v:"honest",t:"素直さ・受容性"},
+      {v:"volume",t:"行動量・スピード"},{v:"logic2",t:"論理的思考力"},{v:"listen",t:"傾聴力"},
+      {v:"lead", t:"巻き込み力・リーダーシップ"},{v:"stress",t:"ストレス耐性・行動耐性"},
+      {v:"learn",t:"学習速度・吸収力"},{v:"issue",t:"課題設定力"}
+    ]},
+  { id:"axis", label:"学生側の「就活の軸」", type:"check", req:true, min:2, max:4,
+    hint:"2〜4個。市場データ（マイナビ2027卒）と自動照合します",
+    opts:[
+      {v:"stability",t:"安定した会社",         m:55.4},
+      {v:"salary",   t:"給料が良い",           m:26.6},
+      {v:"work",     t:"やりたい仕事ができる", m:25.5},
+      {v:"people",   t:"社風・人がいい"},
+      {v:"young",    t:"若手から裁量がある"},
+      {v:"edu",      t:"教育・研修が手厚い"},
+      {v:"notrans",  t:"転勤がない",           m:33.3, inv:true},
+      {v:"future",   t:"企業の将来性"},
+      {v:"benefit",  t:"福利厚生・休日"},
+      {v:"meaning",  t:"社会的意義がある"}
+    ]},
+  { id:"fear", label:"学生が抱える不安・懸念", type:"check", req:false, max:4,
+    hint:"最大4個。ここがスカウト文の「刺さる一文」になります",
+    opts:[
+      {v:"big",   t:"大手に埋もれるのが怖い"},{v:"fit",  t:"自分に合う会社が分からない"},
+      {v:"quota", t:"ノルマがきつそう",m:39.2},{v:"trans",t:"転勤・転居が不安",m:33.3},
+      {v:"grow",  t:"成長できるか不安"},      {v:"pay",  t:"給与が上がるか不安"},
+      {v:"human", t:"人間関係が不安"},        {v:"decide",t:"決めきれない・後悔が怖い"}
+    ]},
+  { id:"exp", label:"学生時代の経験（属性）", type:"check", req:false, max:4,
+    hint:"最大4個。エピソードと口調に反映されます",
+    opts:[
+      {v:"taiikukai",t:"体育会・部活"},{v:"circle",t:"サークル幹部"},{v:"baito",t:"接客アルバイト"},
+      {v:"intern",t:"長期インターン"},{v:"kenkyu",t:"ゼミ・研究に注力"},{v:"ryugaku",t:"留学・国際経験"},
+      {v:"startup",t:"学生団体・起業"},{v:"program",t:"プログラミング・制作"}
+    ]},
+  { id:"info", label:"情報収集チャネル", type:"check", req:false, max:5,
+    hint:"最大5個。採用チャネル戦略の提案に使います",
+    opts:[
+      {v:"navi",t:"ナビサイト"},{v:"scout",t:"スカウト型サービス"},{v:"event",t:"逆求人・合説イベント"},
+      {v:"youtube",t:"YouTube"},{v:"insta",t:"Instagram"},{v:"x",t:"X（Twitter）"},
+      {v:"tiktok",t:"TikTok"},{v:"ob",t:"OB/OG訪問"},{v:"agent",t:"就活エージェント"},
+      {v:"ai",t:"生成AI（ChatGPT等）",m:84.9},{v:"career",t:"大学キャリアセンター"}
+    ]},
+  { id:"gender", label:"顔写真の生成設定", type:"radio", req:false,
+    hint:"本番は画像生成AIで実写クオリティ。プロトタイプはSVGイラストで代替",
+    opts:[{v:"auto",t:"おまかせ"},{v:"m",t:"男性寄り"},{v:"f",t:"女性寄り"}]}
+];
+
+/* ---------- 語彙辞書 ---------- */
+const NAMES = {
+  m:[["佐藤","悠真","ゆうま"],["高橋","颯太","そうた"],["田中","蓮","れん"],["中村","陽翔","はると"],
+     ["小林","大輝","だいき"],["伊藤","湊","みなと"],["渡辺","翔太","しょうた"],["山本","健人","けんと"],
+     ["松本","柊真","しゅうま"],["井上","陸","りく"]],
+  f:[["鈴木","結衣","ゆい"],["加藤","陽菜","ひな"],["吉田","莉子","りこ"],["山田","詩織","しおり"],
+     ["清水","美咲","みさき"],["森","彩音","あやね"],["池田","咲良","さくら"],["橋本","葵","あおい"],
+     ["岡田","optional",""],["石川","真央","まお"]]
+};
+NAMES.f[8]=["岡田","七海","ななみ"];
+
+const UNIV = {
+  top:["関西学院大学 商学部","同志社大学 経済学部","神戸大学 経営学部","立命館大学 経営学部","早稲田大学 商学部","大阪大学 工学部"],
+  mid:["近畿大学 経営学部","関西大学 社会学部","龍谷大学 経済学部","甲南大学 経営学部","日本大学 商学部","摂南大学 理工学部"],
+  stable:["大阪経済大学 経営学部","京都産業大学 経営学部","阪南大学 流通学部","追手門学院大学 経営学部","大阪工業大学 工学部"]
+};
+
+const STANCE_TXT = {
+  growth: {trait:"成長実感を何より大事にする",           word:["成長","裁量","任される"],
+           voice:"20代のうちに「自分がやりました」と言える仕事を持ちたいんです。"},
+  stable: {trait:"堅実に長く働ける環境を求める",         word:["安定","長く働く","腰を据える"],
+           voice:"派手じゃなくていいので、10年後も安心して働けているかが気になります。"},
+  social: {trait:"仕事の社会的な意味を確かめたい",       word:["誰かの役に立つ","社会的意義","誇り"],
+           voice:"この仕事が誰の役に立っているのか、ちゃんと説明できる会社がいいです。"},
+  team:   {trait:"チームで成果を出すことに喜びを感じる", word:["チーム","一緒に","支え合う"],
+           voice:"一人で数字を追うより、チームで勝ったときのほうが嬉しいタイプです。"},
+  solo:   {trait:"自分の裁量で動きたい",                 word:["自分で決める","裁量","任せてもらえる"],
+           voice:"細かく管理されるより、任せてもらって結果で返したいです。"},
+  pro:    {trait:"代替されない専門性を身につけたい",     word:["専門性","スキル","手に職"],
+           voice:"会社の名前じゃなくて、自分の名前で仕事ができるようになりたい。"},
+  wlb:    {trait:"働き方と私生活のバランスを重視する",   word:["休日","メリハリ","無理なく"],
+           voice:"がんばりたい気持ちはあるけど、削られ続ける働き方は続かないと思っていて。"},
+  zero:   {trait:"できあがった仕組みより、つくる側に回りたい", word:["ゼロイチ","立ち上げ","新しい挑戦"],
+           voice:"完成された仕組みを回すより、これから作るところに関わりたいです。"},
+  logic:  {trait:"感覚より根拠で判断したい",             word:["再現性","データ","なぜ"],
+           voice:"「やる気があれば大丈夫」と言われると、逆に不安になります。"},
+  empathy:{trait:"人と深く関わる仕事に価値を感じる",     word:["人","向き合う","信頼"],
+           voice:"最後は「誰と働くか」で決めると思います。"},
+  local:  {trait:"地元・地域で腰を据えて働きたい",       word:["地元","地域","転勤なし"],
+           voice:"地元を離れる前提の会社は、正直そこで検討から外してしまいます。"},
+  global: {trait:"外の世界と接点を持ち続けたい",         word:["海外","グローバル","広い世界"],
+           voice:"狭い世界で完結する仕事だと、たぶん飽きてしまう気がします。"}
+};
+</script>
+<script>
+const SKILL_TXT = {
+  init:  {label:"主体性・自走力",     ev:"指示待ちにならず、自分で次の一手を決められるか",
+          ep:"誰も手を挙げなかった役割に自分から立候補し、進め方から作った"},
+  grit:  {label:"継続力（やり抜く力）", ev:"成果が出ない期間も手を止めずに続けられたか",
+          ep:"結果が出ない時期が半年続いても、毎日の記録だけは止めなかった"},
+  honest:{label:"素直さ・受容性",     ev:"フィードバックを言い訳せずに受け止め、行動を変えられるか",
+          ep:"指摘された翌週にはやり方を変えて持っていき、可愛がられてきた"},
+  volume:{label:"行動量・スピード",   ev:"考える前に動ける量があるか、打席数を増やせるか",
+          ep:"周りの3倍の件数を回ることで、質より先に量で差をつけてきた"},
+  logic2:{label:"論理的思考力",       ev:"事象を構造化し、原因と打ち手を切り分けられるか",
+          ep:"うまくいかない原因を要素分解し、検証を回して改善した"},
+  listen:{label:"傾聴力",             ev:"相手の言葉の裏にある本音を拾えるか",
+          ep:"相手が言わなかった不満を先に察して動き、信頼を得た"},
+  lead:  {label:"巻き込み力",         ev:"立場の違う相手を同じ方向に動かせるか",
+          ep:"温度差のあるメンバーを一人ずつ口説いて、全員参加まで持っていった"},
+  stress:{label:"ストレス耐性・行動耐性", ev:"泥臭い作業・断られる場面に心理的抵抗がないか",
+          ep:"断られ続ける状況でも、翌日には同じテンションで動けた"},
+  learn: {label:"学習速度・吸収力",   ev:"未経験領域を短期間でキャッチアップできるか",
+          ep:"未経験の分野を2週間で人に説明できるレベルまで持っていった"},
+  issue: {label:"課題設定力",         ev:"与えられた問いではなく、解くべき問いを立てられるか",
+          ep:"「やり方の改善」ではなく「そもそもやる必要があるか」から問い直した"}
+};
+
+const AXIS_TXT = {
+  stability:{label:"安定した会社",        line:"派手さより、10年後もこの会社があるかを見ている"},
+  salary:   {label:"給料が良い",          line:"生活が成り立つ水準か、上がる見込みがあるかを具体的に確認したい"},
+  work:     {label:"やりたい仕事ができる",line:"配属ガチャで希望と違う仕事になることを警戒している"},
+  people:   {label:"社風・人がいい",      line:"面接で会った社員の雰囲気を、最後の決め手にしている"},
+  young:    {label:"若手から裁量がある",  line:"1年目に何を任されるのかを、具体例で知りたがっている"},
+  edu:      {label:"教育・研修が手厚い",  line:"放置されないか、立ち上がりを支えてくれるかが不安"},
+  notrans:  {label:"転勤がない",          line:"転居を伴う異動があるかどうかで、検討から外すことがある"},
+  future:   {label:"企業の将来性",        line:"事業が10年後も伸びているイメージが持てるかを見ている"},
+  benefit:  {label:"福利厚生・休日",      line:"制度の有無より「実際に使われているか」を知りたい"},
+  meaning:  {label:"社会的意義がある",    line:"人に説明したときに誇れる仕事かどうかを気にしている"}
+};
+
+const FEAR_TXT = {
+  big:   {label:"大手に埋もれるのが怖い",     voice:"大手に行っても、歯車になって終わるんじゃないかと思ってしまって。",
+          counter:"「規模」ではなく「あなたが担当する範囲」の具体像を提示する"},
+  fit:   {label:"自分に合う会社が分からない", voice:"正直、自分が何に向いているのかまだ分かっていないです。",
+          counter:"活躍している社員のタイプを言語化して、判断材料を渡す"},
+  quota: {label:"ノルマがきつそう",           voice:"営業＝詰められる、というイメージがどうしても抜けなくて。",
+          counter:"目標の立て方・未達時の実際の対応をそのまま開示する"},
+  trans: {label:"転勤・転居が不安",           voice:"転勤があるかどうかは、最初に確認してしまいます。",
+          counter:"異動の実績数と範囲を数字で先に出す"},
+  grow:  {label:"成長できるか不安",           voice:"このまま入って、3年後に何ができる人になっているのか見えないんです。",
+          counter:"1年目・3年目に到達している状態を実名エピソードで示す"},
+  pay:   {label:"給与が上がるか不安",         voice:"初任給より、5年後にいくらになっているかが気になります。",
+          counter:"モデル年収と昇給の条件をオープンにする"},
+  human: {label:"人間関係が不安",             voice:"仕事内容より、合わない人と長時間過ごすほうがきついと思います。",
+          counter:"配属先チームの実際のメンバー構成と関わり方を見せる"},
+  decide:{label:"決めきれない・後悔が怖い",   voice:"1社に決めるのが怖くて、まだ動き続けています。",
+          counter:"比較軸を整理する面談を提供し、決断の支援そのものを価値にする"}
+};
+
+const FEAR_TOPIC = {
+  big:"「大手に埋もれるのでは」という不安", fit:"「自分に合う会社が分からない」という迷い",
+  quota:"ノルマの実態", trans:"転勤・転居の実態", grow:"3年後にどうなれるか",
+  pay:"給与と昇給の実態", human:"配属先の人間関係", decide:"決めきれないという悩み"
+};
+Object.keys(FEAR_TOPIC).forEach(k=>FEAR_TXT[k].topic=FEAR_TOPIC[k]);
+
+const EXP_TXT = {
+  taiikukai:{label:"体育会・部活",     line:"上下関係のある環境で、決められたことをやり切る経験を積んだ"},
+  circle:   {label:"サークル幹部",     line:"温度差のある集団をまとめる難しさを経験している"},
+  baito:    {label:"接客アルバイト",   line:"初対面の相手と関係をつくることに抵抗がない"},
+  intern:   {label:"長期インターン",   line:"社会人と働く感覚があり、仕事の解像度が同世代より高い"},
+  kenkyu:   {label:"ゼミ・研究",       line:"検証と改善のサイクルを回すことに慣れている"},
+  ryugaku:  {label:"留学・国際経験",   line:"環境が変わることへの耐性がある"},
+  startup:  {label:"学生団体・起業",   line:"ゼロから立ち上げる側の当事者感覚を持っている"},
+  program:  {label:"プログラミング・制作", line:"手を動かして形にすることに喜びを感じる"}
+};
+
+const INFO_TXT = {
+  navi:{label:"ナビサイト",ch:"ナビ媒体での露出強化と、検索されるキーワード設計"},
+  scout:{label:"スカウト型サービス",ch:"ダイレクトリクルーティング（個別スカウト文の作り込み）"},
+  event:{label:"逆求人・合説イベント",ch:"逆求人イベントでの1対1接触"},
+  youtube:{label:"YouTube",ch:"社員1日密着など長尺動画コンテンツ"},
+  insta:{label:"Instagram",ch:"社員の日常が伝わるリール・ストーリーズ"},
+  x:{label:"X（Twitter）",ch:"人事アカウントによる選考情報の発信"},
+  tiktok:{label:"TikTok",ch:"ショート動画での認知獲得"},
+  ob:{label:"OB/OG訪問",ch:"OB/OG訪問プラットフォームへの社員登録"},
+  agent:{label:"就活エージェント",ch:"エージェント経由の推薦（人物像の言語化資料が必須）"},
+  ai:{label:"生成AI",ch:"AIに要約されても伝わる、構造化された採用情報の整備"},
+  career:{label:"大学キャリアセンター",ch:"ターゲット大学のキャリアセンターへの求人開拓"}
+};
+
+/* ---------- 市場データ（マイナビ 2027年卒 調査） ---------- */
+const MARKET = {
+  src:"マイナビ「2027年卒 大学生就職意識調査」（有効回答 37,160名／2025年10月〜2026年3月）ほか",
+  select:[
+    {k:"安定した会社", v:55.4, note:"8年連続1位"},
+    {k:"給料が良い",   v:26.6, note:"5年連続増加。「やりたい仕事」を初めて上回る"},
+    {k:"やりたい仕事ができる", v:25.5, note:""}
+  ],
+  avoid:[
+    {k:"ノルマのきつそうな会社", v:39.2, note:""},
+    {k:"転勤の多い会社",         v:33.3, note:"6年連続増加・3年連続30%超"}
+  ],
+  misc:[
+    {k:"「楽しく働きたい」（就職観）", v:40.2, note:"調査開始以来はじめて40%超"},
+    {k:"大手企業志向",               v:50.9, note:"前年比 -0.9pt"},
+    {k:"中堅・中小企業志向",         v:44.0, note:"2年連続で増加"},
+    {k:"就活で生成AIを利用した学生", v:84.9, note:"27卒・AI利用調査"},
+    {k:"AIに就活相談をしたことがある", v:47.6, note:"同上"},
+    {k:"平均内々定保有社数",         v:1.7, unit:"社", note:"27卒内定者意識調査。約6割が1社で活動終了"}
+  ]
+};
+</script>
+<script>
+/* ================= ペルソナ生成エンジン ================= */
+const LAYER_META={
+  top:   {label:"上位2割：幹部候補", badge:"o", pace:"早期から動き、比較検討も速い",
+          prog:"3月時点で内々定1〜2社を保有。より高い基準の会社を探して活動継続中",
+          gap:"「成長できる環境」という言葉だけでは動かない。誰と・何を任されるかまで見る"},
+  mid:   {label:"中位6割：現場中核", badge:"",  pace:"周囲のペースを見ながら動く",
+          prog:"複数社の選考が並行。決め手が見つからず、比較のしかた自体に迷いがある",
+          gap:"情報量が多いほど決められなくなる。判断軸を渡してくれる企業に傾く"},
+  stable:{label:"下位2割：定着重視", badge:"g", pace:"締切に合わせて動く",
+          prog:"エントリー社数を絞って活動。1社目の内定でほぼ意思決定する可能性が高い",
+          gap:"詰められる／放置される不安が最大の離脱要因。安心材料の提示が効く"}
+};
+
+const RADAR_AXES=[
+  {k:"growth", t:"成長意欲"}, {k:"challenge",t:"挑戦性"}, {k:"logic",t:"論理性"},
+  {k:"team",   t:"協調性"},   {k:"stability",t:"安定志向"}, {k:"init",t:"主体性"}
+];
+
+function scoreRadar(st){
+  const s={growth:35,challenge:30,logic:35,team:40,stability:40,init:35};
+  const add=(k,v)=>s[k]=Math.max(5,Math.min(100,s[k]+v));
+  const S=st.stance,K=st.skill,A=st.axis,E=st.exp;
+  if(S.includes("growth")){add("growth",32);add("init",12)}
+  if(S.includes("zero")){add("challenge",34);add("growth",12)}
+  if(S.includes("stable")){add("stability",30);add("challenge",-14)}
+  if(S.includes("wlb")){add("stability",18);add("challenge",-8)}
+  if(S.includes("logic")){add("logic",30)}
+  if(S.includes("pro")){add("logic",14);add("growth",12)}
+  if(S.includes("team")){add("team",26)}
+  if(S.includes("empathy")){add("team",22)}
+  if(S.includes("solo")){add("init",22);add("team",-14)}
+  if(S.includes("local")){add("stability",16)}
+  if(S.includes("global")){add("challenge",16)}
+  if(S.includes("social")){add("team",10)}
+  if(K.includes("init")){add("init",26)}
+  if(K.includes("issue")){add("logic",18);add("init",14)}
+  if(K.includes("logic2")){add("logic",26)}
+  if(K.includes("grit")){add("stability",12);add("init",10)}
+  if(K.includes("volume")){add("challenge",20);add("init",12)}
+  if(K.includes("stress")){add("challenge",16);add("stability",10)}
+  if(K.includes("honest")){add("team",18);add("init",-6)}
+  if(K.includes("listen")){add("team",18)}
+  if(K.includes("lead")){add("init",20);add("team",12)}
+  if(K.includes("learn")){add("growth",18);add("logic",8)}
+  if(A.includes("stability")||A.includes("notrans")||A.includes("benefit")){add("stability",14)}
+  if(A.includes("young")){add("init",14);add("growth",12)}
+  if(A.includes("edu")){add("stability",10);add("init",-8)}
+  if(E.includes("startup")||E.includes("intern")){add("challenge",14);add("init",12)}
+  if(E.includes("taiikukai")){add("stability",8);add("team",10)}
+  if(E.includes("kenkyu")){add("logic",16)}
+  if(st.layer==="top"){add("growth",14);add("challenge",12);add("init",10)}
+  if(st.layer==="stable"){add("stability",18);add("challenge",-12)}
+  return s;
+}
+
+function buildPersona(st,seed){
+  const r=rng(seed);
+  const g = st.gender==="auto" ? (r()<0.5?"m":"f") : st.gender;
+  const nm = pick(r,NAMES[g]);
+  const univ = pick(r,UNIV[st.layer]);
+  const L=LAYER_META[st.layer];
+  const S=st.stance, K=st.skill, A=st.axis, F=st.fear, E=st.exp, I=st.info;
+
+  /* --- リード文 --- */
+  const traits=S.slice(0,3).map(v=>STANCE_TXT[v].trait);
+  const skillEp=K.slice(0,2).map(v=>SKILL_TXT[v].ep);
+  const expLine=E.length?EXP_TXT[E[0]].line:"学生時代は、目の前のことに真面目に取り組んできた";
+  const lead=`${traits.join("／")}${traits.length?"、":""}${st.grad.slice(0,3)}の学生。${expLine}。`
+    +`${skillEp.length?skillEp[0]+"経験を持つ。":""}`
+    +`${L.gap}。`;
+
+  /* --- Voice --- */
+  const voices=[];
+  S.slice(0,2).forEach(v=>voices.push({t:STANCE_TXT[v].voice,tag:"価値観"}));
+  F.slice(0,2).forEach(v=>voices.push({t:FEAR_TXT[v].voice,tag:"不安・懸念"}));
+  if(A.includes("young")) voices.push({t:"「若手が活躍できる」って、どの会社も言うんですよね。1年目に実際なにをやるのか知りたいです。",tag:"就活の軸"});
+  if(A.includes("people")) voices.push({t:"最後は「この人たちと働きたいか」で決めると思います。",tag:"就活の軸"});
+  if(A.includes("stability")) voices.push({t:"安定というのは、潰れないというより、ちゃんと伸びていることだと思っています。",tag:"就活の軸"});
+  if(A.includes("salary")) voices.push({t:"お金の話をすると印象が悪いかなと思って、面接では聞けていません。",tag:"就活の軸"});
+  if(A.includes("notrans")) voices.push({t:"転勤があるかどうかは、正直エントリー前に確認しています。",tag:"就活の軸"});
+  if(I.includes("ai")) voices.push({t:"ESも面接対策も、まずAIに相談してから人に相談しています。",tag:"情報収集"});
+  if(I.includes("ob")) voices.push({t:"説明会の話より、OB訪問で聞いた一言のほうが残っています。",tag:"情報収集"});
+  if(st.layer==="mid") voices.push({t:"このままでいいのかな、って毎晩思います。",tag:"口癖"});
+  if(st.layer==="top") voices.push({t:"入って3年で、市場価値が上がっている自信が持てるかどうかです。",tag:"口癖"});
+  if(st.layer==="stable") voices.push({t:"とりあえず、ちゃんと働ける会社に決まってほしいです。",tag:"口癖"});
+  const voiceList=voices.filter(v=>v.t).slice(0,6);
+
+  /* --- 響く言葉 / 響かない言葉 --- */
+  const hitWords=[...new Set(S.flatMap(v=>STANCE_TXT[v].word))].slice(0,7);
+  const missWords=["若手が活躍できる環境です","アットホームな職場です","風通しの良い社風","やりがいのある仕事","成長できる会社です"];
+
+  /* --- 情報収集チャネル --- */
+  const channels=I.map(v=>INFO_TXT[v].ch);
+
+  /* --- 面接評価軸 --- */
+  const evals=K.map(v=>({label:SKILL_TXT[v].label,ev:SKILL_TXT[v].ev}));
+
+  return {
+    seed, gender:g,
+    name:nm[0]+" "+nm[1], kana:nm[2], univ,
+    layer:st.layer, layerLabel:L.label, badge:L.badge,
+    age: st.grad.startsWith("28") ? "20歳（大学2年）" : st.grad.startsWith("27") ? "21歳（大学3年）" : "22歳（大学4年）",
+    grad: st.grad.split("（")[0],
+    progress: L.prog,
+    lead,
+    voices: voiceList,
+    axes: A.map(v=>({label:AXIS_TXT[v].label,line:AXIS_TXT[v].line,m:(GROUPS[3].opts.find(o=>o.v===v)||{}).m})),
+    fears: F.map(v=>({label:FEAR_TXT[v].label,topic:FEAR_TXT[v].topic,counter:FEAR_TXT[v].counter})),
+    exps: E.map(v=>EXP_TXT[v].label),
+    infos: I.map(v=>INFO_TXT[v].label),
+    channels, evals, hitWords, missWords,
+    radar: scoreRadar(st),
+    st
+  };
+}
+</script>
+<script>
+/* ================= クリエイティブ生成 ================= */
+function buildCreative(p){
+  const st=p.st, r=rng(p.seed^0x9e37), co=st.company;
+  const first=p.name.split(" ")[0];
+  const topAxis=p.axes[0]?p.axes[0].label:"やりたい仕事ができる";
+  const topFear=p.fears[0];
+  const expL=p.exps[0]||"学生時代の取り組み";
+  const hit=p.hitWords.slice(0,3).join("・");
+  const strength=(co.strength||"").trim();
+
+  /* --- 件名3案（訴求軸を変える） --- */
+  const subjects=[
+    {k:"具体性訴求", t:`【${co.name}】1年目から「${st.layer==="top"?"任される":"名前で頼られる"}」${co.job}の話をさせてください`},
+    {k:"不安解消",   t:`${first}さんへ：${topFear?topFear.topic:"配属や働き方"}について、実際のところをお伝えします`},
+    {k:"共感訴求",   t:`${expL}の経験、${co.job}で一番活きるタイプだと思いました（${co.name}）`}
+  ];
+
+  /* --- 本文 --- */
+  const body =
+`${p.name} さん
+
+はじめまして。${co.name}で新卒採用を担当している〇〇と申します。
+プロフィールを拝見し、${expL}に取り組まれてきた点に目が留まり、ご連絡しました。
+
+${co.name}は${co.industry}の会社で、${co.area}を拠点に${co.size}で事業を行っています。${strength?"\n"+strength:""}
+
+${first}さんが会社を選ぶうえで「${topAxis}」を大事にされているとすれば、
+一度お話しする価値はあると思っています。理由は3つあります。
+
+1. ${p.evals[0]?p.evals[0].label:"主体性"}を評価する会社です
+   ${p.evals[0]?p.evals[0].ev:"自分で次の一手を決められるか"}——選考でも、ここだけを見ています。
+
+2. 1年目に何をするかを、具体的にお伝えできます
+   「若手が活躍できる環境です」という説明はしません。
+   実際に入社1年目の社員が担当している顧客・案件・数字を、そのままお見せします。
+
+3. ${topFear?topFear.topic:"気になる点"}について、隠さずお話しします
+   ${topFear?topFear.counter+"つもりです。":"気になる点は、面談で率直にお答えします。"}
+
+まずは30分のカジュアル面談から。選考ではないので、
+「自分に合うかを見極める場」として使っていただければ十分です。
+
+${co.name} 採用担当`;
+
+  /* --- キャッチコピー3案 --- */
+  const copies=[
+    {t: st.layer==="top"
+        ? `つくる側に、1年目から。`
+        : st.layer==="stable" ? `続けられる仕事を、ちゃんと選ぶ。` : `名前で、頼られる。`,
+     s:`ペルソナの一次価値観（${hit}）を最短距離で言い切る型。認知フェーズの露出用。`},
+    {t:`「若手が活躍できる」を、数字で説明します。`,
+     s:`抽象表現への不信（${p.layerLabel}に共通）を逆手に取る型。ナビ媒体・スカウト件名向き。`},
+    {t: topFear ? `${topFear.label.replace(/が(不安|怖い)|そう$/,"")}——その不安のまま、来てください。` : `迷っているうちに、話を聞きに来てください。`,
+     s:`不安に正面から触れる型。母集団は絞られるが、面談後の志望度上昇率が高い。`}
+  ];
+
+  /* --- 面接質問 --- */
+  const qs=[];
+  p.evals.slice(0,4).forEach(e=>{
+    const map={
+      "主体性・自走力":["誰にも頼まれていないのに、自分から始めたことを教えてください。","「やれと言われたからやった」との切り分け。開始の動機を掘る。"],
+      "継続力（やり抜く力）":["成果が出ない期間が一番長かった取り組みは何ですか。その間、何をしていましたか。","結果ではなく無成果期間の行動を聞く（GRIT / Duckworth 2016）。"],
+      "素直さ・受容性":["直近で、人から指摘されて自分のやり方を変えたことを教えてください。","指摘の内容ではなく、変更後の行動と所要時間を確認する。"],
+      "行動量・スピード":["同じ立場の人と比べて、明らかに量をこなしたと言えることは何ですか。","比較対象を本人に設定させ、量の自己認識を測る。"],
+      "論理的思考力":["うまくいかなかった原因を、どう切り分けましたか。","仮説→検証の順序が語れるか。結果論の後付けを見抜く。"],
+      "傾聴力":["相手が口に出さなかった要望に気づいた経験はありますか。","観察の具体度。エピソードの解像度で判定。"],
+      "巻き込み力":["乗り気でない人を動かした経験を教えてください。","説得の手段（正論／関係性／利害）のどれを使ったか。"],
+      "ストレス耐性・行動耐性":["これまでで一番「地味だ」と感じた作業は何で、どう向き合いましたか。","泥臭さへの心理的抵抗の有無。美化された回答は追加質問で崩す。"],
+      "学習速度・吸収力":["未経験のことを短期間で身につけた経験と、その手順を教えてください。","学習の型を持っているか。再現性を確認。"],
+      "課題設定力":["与えられた課題そのものを疑ったことはありますか。","問いの立て直しができるか。上位層の見極めに有効。"]
+    };
+    const m=map[e.label]||[`${e.label}が発揮された場面を教えてください。`,e.ev];
+    qs.push({q:m[0],why:m[1],ax:e.label});
+  });
+  if(topFear) qs.push({q:`当社に対して、いま一番引っかかっている点は何ですか。`,
+    why:`「${topFear.label}」を本人の口から言わせ、その場で解消する。志望度上昇の起点になる質問。`,ax:"志望度形成"});
+
+  /* --- NG/OK --- */
+  const ng={
+    ng:`「若手が活躍できる環境です！」「アットホームな職場です」`,
+    ok: st.layer==="top"
+      ? `「入社2年目で、年商3億円の既存顧客を1人で任されています。判断は本人、責任は上長。」`
+      : st.layer==="stable"
+      ? `「入社1年目は3ヶ月間、先輩が同行します。1人で行くのは4ヶ月目からです。」`
+      : `「入社1年目から“お客様に名前で頼られる営業”を経験できます。」`
+  };
+
+  /* --- チャネル提案 --- */
+  const chans = p.channels.length ? p.channels : ["ナビ媒体での露出強化","ダイレクトリクルーティング"];
+
+  return {subjects,body,copies,qs,ng,chans};
+}
+
+/* ================= 描画ユーティリティ ================= */
+const $=(s,el)=>(el||document).querySelector(s);
+const $$=(s,el)=>[...(el||document).querySelectorAll(s)];
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("on"),1900)}
+function copyText(txt){navigator.clipboard?.writeText(txt).then(()=>toast("コピーしました")).catch(()=>toast("コピーできませんでした"))}
+
+/* ---------- レーダーチャート（単一系列 → 凡例不要・直接ラベル） ---------- */
+function radarSVG(scores){
+  const cx=150,cy=142,R=104,n=RADAR_AXES.length;
+  const pt=(i,v)=>{const a=-Math.PI/2+i*2*Math.PI/n,rr=R*v/100;return[cx+rr*Math.cos(a),cy+rr*Math.sin(a)]};
+  let rings="";[25,50,75,100].forEach(v=>{
+    const d=RADAR_AXES.map((_,i)=>pt(i,v).join(",")).join(" ");
+    rings+=`<polygon points="${d}" fill="none" stroke="var(--grid)" stroke-width="1"/>`;
+  });
+  let spokes="",labels="";
+  RADAR_AXES.forEach((ax,i)=>{
+    const[x,y]=pt(i,100);spokes+=`<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--grid)" stroke-width="1"/>`;
+    const[lx,ly]=pt(i,100);const ox=(lx-cx)*0.22,oy=(ly-cy)*0.22;
+    const anchor=Math.abs(lx-cx)<4?"middle":(lx>cx?"start":"end");
+    labels+=`<text x="${lx+ox}" y="${ly+oy+4}" text-anchor="${anchor}" font-size="12" fill="var(--ink-2)" font-weight="600">${ax.t}</text>`
+      +`<text x="${lx+ox}" y="${ly+oy+19}" text-anchor="${anchor}" font-size="11" fill="var(--ink-3)" style="font-variant-numeric:tabular-nums">${scores[ax.k]}</text>`;
+  });
+  const poly=RADAR_AXES.map((ax,i)=>pt(i,scores[ax.k]).join(",")).join(" ");
+  let dots="";RADAR_AXES.forEach((ax,i)=>{const[x,y]=pt(i,scores[ax.k]);
+    dots+=`<circle cx="${x}" cy="${y}" r="4.5" fill="var(--s1)" stroke="var(--surface-1)" stroke-width="2"/>`});
+  return `<svg viewBox="-46 -12 392 330" width="100%" style="max-width:420px;display:block;margin:0 auto" role="img" aria-label="心理傾向レーダーチャート">
+    ${rings}${spokes}
+    <polygon points="${poly}" fill="var(--s1)" fill-opacity=".16" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/>
+    ${dots}${labels}</svg>`;
+}
+</script>
+<script>
+const avatarSVG=(seed,gender)=>portraitSVG(seed,gender);
+
+/* ================= 状態 ================= */
+const state={layer:"top",stance:[],skill:[],axis:[],fear:[],exp:[],info:[],gender:"auto"};
+let current=null, currentCreative=null, cands=[], candIdx=0, step=1, mode="dash";
+const settings={imgMode:"svg",apiKey:"",geminiKey:"",geminiModel:"gemini-3-pro-image",geminiSize:"2K"};
+
+/* 顔の描画：写真があれば <img>、無ければイラストにフォールバック。
+   壊れた画像アイコンは出さない（persona-portraits §5）。 */
+function faceHTML(p,o){
+  o=o||{};
+  if(p.photo){
+    const label=o.alt!==undefined?o.alt:`${p.name} ${p.grad} ${p.st.company.job}志望`;
+    return `<img class="face" src="${p.photo}" width="${o.w||400}" height="${o.h||400}"`
+      +`${o.lazy?' loading="lazy" decoding="async"':''} alt="${esc(label)}"`
+      +` onerror="this.replaceWith(document.createRange().createContextualFragment(window.__svgFor(${p.seed},'${p.gender}')))">`;
+  }
+  return o.crop ? portraitSVG(p.seed,p.gender).replace('viewBox="0 0 400 440"','viewBox="26 44 348 322"')
+                : portraitSVG(p.seed,p.gender);
+}
+window.__svgFor=(s,g)=>portraitSVG(s,g);
+
+/* ================= 左ナビ ================= */
+const ICONS={
+ lib:'<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>',
+ lab:'<svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6L4.5 19A2 2 0 0 0 6.2 22h11.6a2 2 0 0 0 1.7-3L14 9V3"/><path d="M7 15h10"/></svg>',
+ com:'<svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+ job:'<svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>',
+ mail:'<svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>',
+ set:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10 3.09V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v.09A1.65 1.65 0 0 0 20.91 10H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'
+};
+const NAVS=[
+  {k:"lib", t:"ペルソナ<br>ライブラリ", i:"lib"},
+  {k:"lab", t:"分析ラボ",            i:"lab"},
+  {k:"com", t:"コミュニ<br>ケーション", i:"com"},
+  {k:"job", t:"求人票作成",           i:"job"},
+  {k:"mail",t:"スカウト<br>メール",    i:"mail"},
+  {k:"set", t:"設定",                i:"set"}
+];
+let navKey="lib";
+function renderNav(){
+  $("#nav").innerHTML=NAVS.map(n=>`<button class="navb ${n.k===navKey?"on":""}" data-nav="${n.k}">${ICONS[n.i]}<span>${n.t}</span></button>`).join("");
+}
+function goNav(k){
+  navKey=k; renderNav();
+  if(k==="set"){ show("vSet"); return; }
+  if(k==="lib"){ mode="dash"; show("vDash"); syncMode(); return; }
+  if(!current){ mode="dash"; show("vDash"); syncMode(); toast("先にペルソナを生成してください"); return; }
+  mode="wiz"; show("vWiz"); syncMode();
+  goStep(k==="lab"?2:3);
+  if(k!=="lab") setTimeout(()=>{
+    const idx = k==="job"?1 : k==="mail"?0 : 3;
+    const el=$$("#creativeHost .out")[idx]; el&&el.scrollIntoView({behavior:"smooth",block:"start"});
+  },80);
+}
+function show(id){["vDash","vWiz","vSet"].forEach(v=>$("#"+v).classList.toggle("hidden",v!==id))}
+function syncMode(){$$("[data-mode]").forEach(b=>b.classList.toggle("on",b.dataset.mode===mode))}
+
+/* ================= フォーム ================= */
+function optHtml(g,o,compact,pre){
+  return `<label class="opt${g.type==="radio"?" radio":""}">
+    <input type="${g.type==="radio"?"radio":"checkbox"}" name="${(pre||"")+g.id}" value="${o.v}"${g.type==="radio"&&state[g.id]===o.v?" checked":""}>
+    <span>${esc(o.t)}${!compact&&o.d?` <small>${esc(o.d)}</small>`:""}${o.m?` <small>市場${o.m}%</small>`:""}</span></label>`;
+}
+function renderForm(){
+  $("#formHost").innerHTML=GROUPS.map(g=>`
+    <div class="cbox" data-g="${g.id}">
+      <b>${g.label}${g.req?' <em style="font-style:normal;color:var(--s2);font-size:10px">必須</em>':""}
+        <span class="count" data-count="${g.id}" style="float:right;font-weight:600"></span></b>
+      <div class="opts">${g.opts.map(o=>optHtml(g,o,true,"")).join("")}</div>
+    </div>`).join("");
+  $("#formHost").addEventListener("change",onChange);
+  $("#wizMirror").innerHTML=GROUPS.map(g=>`
+    <fieldset><legend class="lg"><b>${g.label}</b>${g.req?'<span class="req">必須</span>':""}
+      <span>${g.hint}</span></legend>
+      <div class="opts">${g.opts.map(o=>optHtml(g,o,false,"w_")).join("")}</div></fieldset>`).join("");
+  $("#wizMirror").addEventListener("change",onChange);
+  syncCounts();
+}
+function onChange(e){
+  const nm=e.target.name.replace(/^w_/,"");
+  const g=GROUPS.find(x=>x.id===nm); if(!g)return;
+  if(g.type==="radio"){state[g.id]=e.target.value}
+  else{
+    const arr=state[g.id],v=e.target.value;
+    if(e.target.checked){
+      if(g.max&&arr.length>=g.max){e.target.checked=false;toast(`${g.label}は最大${g.max}個までです`);return}
+      arr.push(v);
+    }else{const i=arr.indexOf(v);if(i>-1)arr.splice(i,1)}
+  }
+  syncAll(); syncCounts();
+}
+function syncAll(){
+  $$("#formHost input, #wizMirror input").forEach(i=>{
+    const n=i.name.replace(/^w_/,"");
+    i.checked = i.type==="radio" ? state[n]===i.value : (state[n]||[]).includes(i.value);
+  });
+}
+function syncCounts(){
+  GROUPS.forEach(g=>{
+    const el=$(`[data-count="${g.id}"]`); if(!el)return;
+    if(g.type==="radio"){el.textContent=state[g.id]?"選択済":"未選択";el.style.color="var(--ink-3)"}
+    else{const n=state[g.id].length;el.textContent=`${n}/${g.min?g.min+"〜":""}${g.max||""}`;
+      el.style.color=(g.min&&n<g.min)?"var(--s2)":"var(--ink-3)"}
+  });
+  const total=GROUPS.filter(g=>g.type==="check").reduce((a,g)=>a+state[g.id].length,0);
+  const sc=$("#selcount"); if(sc) sc.textContent=` 現在 ${total} 項目を選択中`;
+  const miss=GROUPS.filter(g=>g.req&&g.type==="check"&&state[g.id].length<(g.min||1)).map(g=>g.label);
+  if(!($("#cName").value||"").trim()) miss.unshift("会社名");
+  if(!$("#cJob").value) miss.push("募集職種");
+  [["#genBtn","#genHint"],["#genBtn2","#genHint2"]].forEach(([b,h])=>{
+    const B=$(b),H=$(h); if(!B)return; B.disabled=miss.length>0;
+    if(H) H.textContent=miss.length?`未入力：${miss.join(" / ")}`:"5パターンを同時に生成します";
+  });
+}
+function readCompany(){
+  return {name:($("#cName").value||"").trim()||"当社",industry:$("#cInd").value||"—",
+    job:$("#cJob").value||"総合職",area:($("#cArea").value||"").trim()||"本社",
+    size:$("#cSize").value||"—",strength:($("#cStrength").value||"").trim()};
+}
+function currentInput(){
+  const st={...state,company:readCompany(),grad:$("#cGrad").value};
+  ["stance","skill","axis","fear","exp","info"].forEach(k=>st[k]=[...state[k]]);
+  return st;
+}
+
+/* ================= ステッパー ================= */
+const STEP_LABELS=["項目チェック","顔写真＆AI分析","クリエイティブ出力"];
+function renderSteps(){
+  $("#steps").innerHTML=STEP_LABELS.map((t,i)=>{const n=i+1;
+    return `<button class="step ${n<step?"done":""}" aria-current="${n===step}" data-step="${n}">
+      <span class="n">${n<step?"✓":n}</span>${t}</button>`}).join("");
+}
+function goStep(n){
+  if(n>1&&!current){toast("先にペルソナを生成してください");return}
+  step=n;renderSteps();
+  ["#s1","#s2","#s3"].forEach((s,i)=>$(s).classList.toggle("hidden",i+1!==n));
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+</script>
+<script>
+/* ---------- ペルソナ描画 ---------- */
+function renderPersona(p){
+  const st=p.st;
+  $("#pcard").innerHTML=`
+    <div class="photo">
+      ${faceHTML(p,{w:222,h:222})}
+      <div class="cap">${p.photo?"※画像はイメージです。AI生成であり、実在の人物ではありません。":"イラスト表示中。「この人の顔写真を生成」を押すと実写になります。"}</div>
+    </div>
+    <div class="pmain">
+      <div class="pname">
+        <h3>${esc(p.name)}</h3><span class="kana">${esc(p.kana)}</span>
+        <span class="badge ${p.badge}">${esc(p.layerLabel)}</span>
+        <span class="badge">${esc(p.grad)}</span>
+      </div>
+      <div class="meta">
+        <span><b>${esc(p.age)}</b></span><span>${esc(p.univ)}</span>
+        <span>志望職種：<b>${esc(st.company.job)}</b></span><span>${esc(st.company.area)}</span>
+      </div>
+      <p class="lead">${esc(p.lead)}</p>
+
+      <div class="blk"><h4>就活の進捗</h4>
+        <p style="margin:0;font-size:14px;line-height:1.85">${esc(p.progress)}</p></div>
+
+      <div class="blk"><h4>生の声（Voice）</h4>
+        <ul class="voice">${p.voices.map(v=>`<li>${esc(v.t)}<span class="tag">${esc(v.tag)}</span></li>`).join("")}</ul></div>
+
+      <div class="blk"><h4>企業選びの軸</h4>
+        <dl class="kv">${p.axes.map(a=>`<dt>${esc(a.label)}${a.m?`<br><span style="font-weight:400;color:var(--ink-3)">市場 ${a.m}%</span>`:""}</dt><dd>${esc(a.line)}</dd>`).join("")}</dl></div>
+
+      ${p.fears.length?`<div class="blk"><h4>不安・懸念と、その打ち手</h4>
+        <dl class="kv">${p.fears.map(f=>`<dt style="color:var(--s2)">${esc(f.label)}</dt><dd>→ ${esc(f.counter)}</dd>`).join("")}</dl></div>`:""}
+
+      <div class="blk"><h4>刺さる言葉 / 刺さらない言葉</h4>
+        <div>${p.hitWords.map(w=>`<span class="pill okp">${esc(w)}</span>`).join("")}</div>
+        <div style="margin-top:6px">${p.missWords.slice(0,3).map(w=>`<span class="pill warnp">✕ ${esc(w)}</span>`).join("")}</div>
+      </div>
+
+      ${p.infos.length?`<div class="blk"><h4>情報収集行動 → 推奨チャネル</h4>
+        <div>${p.infos.map(w=>`<span class="pill">${esc(w)}</span>`).join("")}</div>
+        <ul style="margin:9px 0 0;padding-left:19px;font-size:13.5px;line-height:1.85;color:var(--ink-2)">
+          ${p.channels.map(c=>`<li>${esc(c)}</li>`).join("")}</ul></div>`:""}
+    </div>`;
+
+  /* レーダー */
+  $("#vizRadarHost").innerHTML=`<div class="viz">
+    <h5>心理傾向スコア</h5>
+    <p class="note">選択された価値観・行動特性から算出（0–100）。単一の人物像のため凡例は不要 — 各頂点に値を直接表示。</p>
+    ${radarSVG(p.radar)}
+    <details class="tblwrap"><summary>数値を表で見る</summary>
+      <table class="tbl"><thead><tr><th>観点</th><th class="num">スコア</th></tr></thead><tbody>
+      ${RADAR_AXES.map(a=>`<tr><td>${a.t}</td><td class="num">${p.radar[a.k]}</td></tr>`).join("")}
+      </tbody></table></details></div>`;
+
+  /* 軸 × 市場：市場データを持つ4項目の実勢を表示し、このペルソナが選んだ軸を強調 */
+  const MKT_AXES=[{v:"stability",t:"安定した会社",m:55.4},{v:"notrans",t:"転勤がない",m:33.3},
+                  {v:"salary",t:"給料が良い",m:26.6},{v:"work",t:"やりたい仕事ができる",m:25.5}];
+  const selected=new Set(p.st.axis);
+  const hit=MKT_AXES.filter(a=>selected.has(a.v));
+  $("#vizBarHost").innerHTML=`<div class="viz">
+    <h5>このペルソナの軸 × 27卒市場 の実勢</h5>
+    <p class="note">棒は「27卒学生全体のうち、その項目を挙げた割合」。このペルソナが重視する軸を濃色で強調しています。</p>
+    <div class="bars">${MKT_AXES.map(a=>{
+      const on=selected.has(a.v);
+      return `<div class="barrow">
+        <div class="lbl"><b style="${on?"":"color:var(--ink-3);font-weight:400"}">${esc(a.t)}${on?" ●":""}</b></div>
+        <div class="track"><div class="bar" style="width:${a.m*1.45}%;background:${on?"var(--s1)":"var(--grid)"}">
+          <span style="${on?"color:var(--ink-1);font-weight:700":""}">${a.m.toFixed(1)}%</span></div></div>
+      </div>`}).join("")}</div>
+    <div class="legend"><span><i style="background:var(--s1)"></i>このペルソナが重視する軸（${hit.length}件）</span>
+      <span><i style="background:var(--grid)"></i>今回は非該当</span></div>
+    <p class="note" style="margin:10px 0 0">${hit.length
+      ? `市場でも上位の「${hit[0].t}」（${hit[0].m}%）を重視。競合他社も同じ訴求をしてくるため、<b>抽象語では差がつかない</b>ことに注意。`
+      : `市場上位4項目のいずれも重視していない、少数派のペルソナ。汎用的な訴求は効かず、個別の言語化が必須です。`}</p>
+    <details class="tblwrap"><summary>数値を表で見る</summary>
+      <table class="tbl"><thead><tr><th>項目</th><th class="num">市場（%）</th><th>本ペルソナ</th></tr></thead><tbody>
+      ${MKT_AXES.map(a=>`<tr><td>${esc(a.t)}</td><td class="num">${a.m.toFixed(1)}</td><td>${selected.has(a.v)?"重視する":"—"}</td></tr>`).join("")}
+      </tbody></table></details>
+  </div>`;
+
+  /* 市場データパネル */
+  $("#marketHost").innerHTML=`
+    <div class="blk" style="margin-top:0"><h4>参照した外部データ（採用市場の実勢）</h4></div>
+    <div class="grid3">
+      ${[["企業選択のポイント",MARKET.select],["行きたくない会社",MARKET.avoid],["その他の指標",MARKET.misc]].map(([t,rows])=>`
+        <div class="viz"><h5>${t}</h5>
+          <table class="tbl"><tbody>${rows.map(x=>`<tr><td>${esc(x.k)}${x.note?`<br><small style="color:var(--ink-3)">${esc(x.note)}</small>`:""}</td>
+            <td class="num" style="font-weight:700;white-space:nowrap">${x.unit?x.v+x.unit:x.v.toFixed(1)+"%"}</td></tr>`).join("")}</tbody></table>
+        </div>`).join("")}
+    </div>
+    <p class="note-src" style="margin-top:12px">出典：${esc(MARKET.src)} ／ マイナビ キャリアリサーチLab</p>`;
+}
+
+/* ---------- クリエイティブ描画 ---------- */
+function renderCreative(p,c){
+  const co=p.st.company;
+  $("#creativeHost").innerHTML=`
+  <div class="out">
+    <header><h4>スカウトメール</h4><span class="k">${esc(co.name)} → ${esc(p.name)} さん</span>
+      <button class="btn ghost sm noprint" data-copy="mail">本文をコピー</button></header>
+    <div class="body">
+      ${c.subjects.map(s=>`<div class="subj"><em>${esc(s.k)}</em><span>${esc(s.t)}</span></div>`).join("")}
+      <div class="mail" id="mailBody">${esc(c.body)}</div>
+    </div>
+  </div>
+
+  <div class="out">
+    <header><h4>求人キャッチコピー（3案）</h4><span class="k">媒体・LP・スカウト件名に転用可</span></header>
+    <div class="body">
+      ${c.copies.map(x=>`<div class="copyq">${esc(x.t)}<small>${esc(x.s)}</small></div>`).join("")}
+      <div class="ngok" style="margin-top:14px">
+        <div class="ng"><h6>NG（どの企業でも言える）</h6><p>${esc(c.ng.ng)}</p></div>
+        <div class="ok"><h6>OK（このペルソナに刺さる）</h6><p>${esc(c.ng.ok)}</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="out">
+    <header><h4>面接質問案 ＆ 評価観点</h4><span class="k">選択した行動特性から自動生成</span>
+      <button class="btn ghost sm noprint" data-copy="qs">質問をコピー</button></header>
+    <div class="body"><ol class="qs" id="qsList">
+      ${c.qs.map(q=>`<li><b>${esc(q.q)}</b><span class="why">評価観点：${esc(q.ax)} — ${esc(q.why)}</span></li>`).join("")}
+    </ol></div>
+  </div>
+
+  <div class="out">
+    <header><h4>推奨チャネル ＆ 接点設計</h4><span class="k">情報収集行動から逆算</span></header>
+    <div class="body">
+      <ul style="margin:0 0 14px;padding-left:20px;font-size:14px;line-height:1.9">
+        ${c.chans.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>
+      <table class="tbl"><thead><tr><th>フェーズ</th><th>この学生の心理</th><th>打ち手</th></tr></thead><tbody>
+        <tr><td>認知</td><td>この会社を知らない</td><td>${esc(c.chans[0]||"ダイレクトリクルーティング")}</td></tr>
+        <tr><td>理解</td><td>どんな会社か知りたい</td><td>1年目の実務が分かる具体コンテンツ</td></tr>
+        <tr><td>共感</td><td>${esc(p.axes[0]?p.axes[0].label:"社風")}が自分に合うか確かめたい</td><td>社員座談会／OB・OG訪問</td></tr>
+        <tr><td>行動</td><td>受けてみようか迷う</td><td>選考ではないカジュアル面談</td></tr>
+        <tr><td>承諾</td><td>${esc(p.fears[0]?p.fears[0].label:"決めきる不安")}</td><td>${esc(p.fears[0]?p.fears[0].counter:"現場社員との面談で不安を個別解消")}</td></tr>
+      </tbody></table>
+    </div>
+  </div>`;
+  $$("[data-copy]").forEach(b=>b.onclick=()=>{
+    copyText(b.dataset.copy==="mail" ? c.subjects[0].t+"\n\n"+c.body
+      : c.qs.map((q,i)=>`${i+1}. ${q.q}\n   （評価観点：${q.ax}）`).join("\n"));
+  });
+}
+
+
+</script>
+<script>
+/* =====================================================================
+   企業サイトURL / 貼り付けテキストからの自社情報 自動読み取り
+   1) 直接fetch → 2) 読み取りプロキシ → 3) 手動貼り付け の順にフォールバック
+   APIキーが設定されていれば LLM で構造化、なければルールベース抽出。
+   ===================================================================== */
+const PREFS=["北海道","青森県","岩手県","宮城県","秋田県","山形県","福島県","茨城県","栃木県","群馬県","埼玉県","千葉県","東京都","神奈川県","新潟県","富山県","石川県","福井県","山梨県","長野県","岐阜県","静岡県","愛知県","三重県","滋賀県","京都府","大阪府","兵庫県","奈良県","和歌山県","鳥取県","島根県","岡山県","広島県","山口県","徳島県","香川県","愛媛県","高知県","福岡県","佐賀県","長崎県","熊本県","大分県","宮崎県","鹿児島県","沖縄県"];
+const IND_KEYS={
+  "製造・メーカー":["製造","メーカー","工業","鋼管","鋼材","部品","加工","プラント","化学","機械"],
+  "商社・卸売":["商社","卸","販売代理","貿易"],
+  "IT・ソフトウェア":["ソフトウェア","システム","SaaS","アプリ","ソリューション","IT","DX","クラウド","Web制作"],
+  "建設・不動産":["建設","建築","土木","不動産","住宅","設備工事","施工"],
+  "人材・HR":["人材","採用支援","派遣","紹介","HR"],
+  "医療・福祉":["医療","介護","福祉","病院","クリニック","保育"],
+  "小売・サービス":["小売","店舗","飲食","サービス","EC","アパレル"],
+  "金融・保険":["銀行","証券","保険","信用金庫","リース","ファイナンス"],
+  "運輸・物流":["物流","運送","倉庫","配送","運輸","トラック"],
+  "広告・メディア":["広告","メディア","出版","マーケティング支援","制作会社"]
+};
+const JOB_KEYS={
+  "法人営業":["法人営業","BtoB","ルート営業","セールス"],
+  "企画営業":["企画営業","提案営業"],
+  "エンジニア":["エンジニア","開発","プログラマ","SE"],
+  "施工管理":["施工管理","現場監督"],
+  "生産技術":["生産技術","製造技術","品質管理"],
+  "販売・接客":["販売","接客","店舗スタッフ"],
+  "事務・管理":["事務","経理","総務","管理部門"],
+  "コンサルタント":["コンサル"],
+  "マーケティング":["マーケティング","広報","PR"]
+};
+
+function stripHtml(html){
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi," ").replace(/<style[\s\S]*?<\/style>/gi," ")
+    .replace(/<[^>]+>/g," ").replace(/&nbsp;/g," ").replace(/&amp;/g,"&")
+    .replace(/[ \t　]+/g," ").replace(/\n{2,}/g,"\n").trim();
+}
+
+function extractCompany(raw){
+  const html=raw, text=/<[a-z!][\s\S]*>/i.test(raw)? stripHtml(raw) : raw;
+  const out={};
+  // 会社名
+  const og=(html.match(/property=["']og:site_name["'][^>]*content=["']([^"']+)/i)
+          ||html.match(/content=["']([^"']+)["'][^>]*property=["']og:site_name["']/i)||[])[1];
+  const title=(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1];
+  const corp=(text.match(/[^\s|｜・－-]{1,18}(?:株式会社|有限会社|合同会社)|(?:株式会社|有限会社|合同会社)[^\s|｜・－-]{1,18}/)||[])[0];
+  out.name=(corp||og||(title||"").split(/[|｜\-–—]/)[0]||"").trim();
+  // 勤務地（本社所在地 → 都道府県）
+  const near=(text.match(/(?:本社|所在地|本店)[^0-9]{0,20}/)||[""])[0]+text.slice(0,4000);
+  out.area=PREFS.find(p=>near.includes(p))||PREFS.find(p=>text.includes(p))||"";
+  // 従業員規模
+  const emp=text.match(/従業(?:員|者)数?[^0-9]{0,10}([0-9,，]+)\s*(?:名|人)/);
+  if(emp){
+    const n=parseInt(emp[1].replace(/[,，]/g,""),10);
+    out.size = n<=50?"〜50名" : n<=100?"51〜100名" : n<=300?"101〜300名" : n<=1000?"301〜1,000名" : "1,001名〜";
+    out.empNum=n;
+  }
+  // 業種
+  const score=(keys)=>keys.reduce((a,k)=>a+(text.split(k).length-1),0);
+  out.industry=Object.entries(IND_KEYS).map(([k,v])=>[k,score(v)]).sort((a,b)=>b[1]-a[1]).filter(x=>x[1]>0).map(x=>x[0])[0]||"";
+  out.job=Object.entries(JOB_KEYS).map(([k,v])=>[k,score(v)]).sort((a,b)=>b[1]-a[1]).filter(x=>x[1]>0).map(x=>x[0])[0]||"";
+  // 強み・独自性
+  const desc=(html.match(/name=["']description["'][^>]*content=["']([^"']+)/i)
+            ||html.match(/content=["']([^"']+)["'][^>]*name=["']description["']/i)||[])[1];
+  const sent=text.split(/[。\n]/).map(s=>s.trim())
+    .filter(s=>s.length>=18&&s.length<=90&&/(ビジョン|理念|ミッション|使命|強み|特徴|私たちは|当社は|一貫|国内シェア|創業|専門|独自)/.test(s));
+  out.strength=[desc,sent[0],sent[1]].filter(Boolean).slice(0,2).join("。").slice(0,140);
+  if(out.strength && !/[。.]$/.test(out.strength)) out.strength+="。";
+  return out;
+}
+
+async function fetchPage(url){
+  const tries=[
+    {label:"直接取得",   u:url},
+    {label:"読み取りプロキシ", u:"https://r.jina.ai/"+url},
+    {label:"CORSプロキシ",   u:"https://api.allorigins.win/raw?url="+encodeURIComponent(url)}
+  ];
+  for(const t of tries){
+    try{
+      const ctl=new AbortController(); const to=setTimeout(()=>ctl.abort(),12000);
+      const r=await fetch(t.u,{signal:ctl.signal}); clearTimeout(to);
+      if(!r.ok) continue;
+      const txt=await r.text();
+      if(txt && txt.length>200) return {txt,via:t.label};
+    }catch(e){}
+  }
+  return null;
+}
+
+/* APIキーがある場合は LLM で構造化（精度が上がる） */
+async function llmExtract(text){
+  if(!settings.apiKey) return null;
+  try{
+    const r=await fetch("https://api.openai.com/v1/chat/completions",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+settings.apiKey},
+      body:JSON.stringify({
+        model:"gpt-4o-mini", temperature:0,
+        response_format:{type:"json_object"},
+        messages:[
+          {role:"system",content:"あなたは採用支援ツールの情報抽出エンジンです。与えられた企業サイトのテキストから、指定のJSONだけを返してください。分からない項目は空文字にし、推測で埋めないでください。"},
+          {role:"user",content:`次のテキストから抽出してください。
+JSONスキーマ: {"name":"正式な会社名","industry":"${IND.join("|")} のいずれか","job":"${JOBS.join("|")} のいずれか（新卒の募集職種。不明なら空）","area":"本社の都道府県","size":"${SIZE.join("|")} のいずれか","strength":"自社の強み・独自性を1〜2文（80字以内、サイトの表現を要約）"}
+
+--- テキスト ---
+${text.slice(0,12000)}`}
+        ]
+      })
+    });
+    const j=await r.json();
+    const c=j?.choices?.[0]?.message?.content;
+    return c? JSON.parse(c) : null;
+  }catch(e){ return null; }
+}
+
+function applyCompany(info,srcLabel){
+  const set=(sel,val,list)=>{
+    if(!val) return null;
+    const el=$(sel);
+    if(el.tagName==="SELECT"){
+      const hit=(list||[]).find(x=>x===val) || (list||[]).find(x=>val.includes(x)||x.includes(val));
+      if(hit){el.value=hit;return hit} return null;
+    }
+    el.value=val; return val;
+  };
+  const done=[];
+  if(info.name && set("#cName",info.name)) done.push("会社名");
+  if(set("#cInd",info.industry,IND)) done.push("業種");
+  if(set("#cJob",info.job,JOBS)) done.push("募集職種");
+  if(info.area && set("#cArea",info.area)) done.push("勤務地");
+  if(set("#cSize",info.size,SIZE)) done.push("規模");
+  if(info.strength){ $("#cStrength").value=info.strength; done.push("強み"); }
+  syncCounts();
+  const miss=["会社名","業種","募集職種","勤務地","規模","強み"].filter(x=>!done.includes(x));
+  $("#urlStat").innerHTML = done.length
+    ? `<span style="color:var(--good)">読み取り完了（${srcLabel}）：${done.join("・")}</span>`
+      + (miss.length?`<br><span style="color:var(--s2)">未取得：${miss.join("・")} — 手入力してください</span>`:"")
+      + `<br>自動抽出のため、<b>内容は必ずご確認ください。</b>`
+    : `<span style="color:var(--s2)">項目を抽出できませんでした。手入力するか、テキストを貼り付けてください。</span>`;
+}
+
+async function readFromUrl(){
+  const url=$("#cUrl").value.trim();
+  if(!/^https?:\/\//.test(url)){ $("#urlStat").innerHTML='<span style="color:var(--s2)">https:// から始まるURLを入力してください。</span>'; return; }
+  const btn=$("#readUrl"); btn.disabled=true; const old=btn.textContent; btn.textContent="読取中…";
+  $("#urlStat").textContent="ページを取得しています…";
+  const got=await fetchPage(url);
+  if(!got){
+    btn.disabled=false; btn.textContent=old;
+    $("#urlStat").innerHTML='<span style="color:var(--s2)">ページを取得できませんでした。</span><br>'
+      +'企業サイト側の制限（CORS）でブラウザから直接読めない場合があります。'
+      +'下の「テキストを貼り付ける」から、会社概要ページの本文を貼り付けてください。';
+    return;
+  }
+  $("#urlStat").textContent="内容を解析しています…";
+  const plain=stripHtml(got.txt);
+  const viaLLM=await llmExtract(plain);
+  applyCompany(viaLLM||extractCompany(got.txt), got.via+(viaLLM?"＋AI解析":"／ルール解析"));
+  btn.disabled=false; btn.textContent=old;
+}
+
+async function readFromPaste(){
+  const t=$("#cPaste").value.trim();
+  if(t.length<40){ $("#urlStat").innerHTML='<span style="color:var(--s2)">テキストが短すぎます。会社概要ページの本文を貼り付けてください。</span>'; return; }
+  $("#urlStat").textContent="内容を解析しています…";
+  const viaLLM=await llmExtract(t);
+  applyCompany(viaLLM||extractCompany(t), "貼り付けテキスト"+(viaLLM?"＋AI解析":"／ルール解析"));
+}
+</script>
+<script>
+/* =====================================================================
+   ペルソナ・ポートレート生成（persona-portraits スキル準拠）
+   Nano Banana / Gemini 画像生成API 用のプロンプト構築とAPI呼び出し。
+
+   FIXED_* は全ペルソナで一字一句同一。ここを人物ごとに変えると
+   セットで並べたときにライティング・画角・色調が揃わなくなる。
+   ===================================================================== */
+
+const FIXED_SHOT = "A photorealistic corporate headshot";
+const FIXED_LIGHTING =
+  "Soft diffused natural window light from camera-left with gentle fill, " +
+  "no harsh shadows, neutral colour grade, true-to-life skin tones.";
+const FIXED_CAMERA =
+  "Shot at eye level with an 85mm portrait lens at f/2.0, shallow depth of field, " +
+  "sharp focus on the eyes, head and shoulders framing, subject centred and " +
+  "looking at the camera.";
+const FIXED_NEGATIVE =
+  "Natural skin texture with visible pores, not retouched, not glamorous, " +
+  "not a fashion model. No text, no logos, no watermark, no captions, " +
+  "no on-screen graphics, no extra people.";
+
+/* --- 年齢：数字ではなく皮膚と姿勢で書く（対象は就活生＝20〜22歳） --- */
+const AGE_LOOK = {
+  "20": "in {poss} early 20s, smooth complexion, a soft jawline, a slightly uncertain posture",
+  "21": "in {poss} early 20s, smooth complexion, a soft jawline, an open unguarded expression",
+  "22": "in {poss} early 20s, smooth clear skin, a lightly defined jawline, a composed but young bearing"
+};
+
+/* --- 服装：就活生はリクルートスーツが基本。志望業界で細部を変える --- */
+const WARDROBE = {
+  m:{ base:"wearing a plain black recruit suit with a white shirt and a plain dark navy tie",
+      soft:"wearing a plain dark navy recruit suit with a white shirt and no tie" },
+  f:{ base:"wearing a plain black recruit suit jacket over a white blouse",
+      soft:"wearing a plain dark navy recruit suit jacket over a white blouse" }
+};
+const SOFT_IND = ["IT・ソフトウェア","広告・メディア","小売・サービス"];
+
+/* --- 背景：全員同じにすると誰が誰か分からなくなるので候補ごとに散らす --- */
+const SETTINGS = [
+  "in a bright university building corridor, glass and daylight softly blurred behind",
+  "at a job-fair venue, company booths softly blurred behind",
+  "on a university campus walkway, trees softly blurred behind",
+  "in a quiet university library, shelving softly blurred behind",
+  "in a bright seminar room, rows of chairs softly blurred behind"
+];
+
+/* --- 表情：性格・課題から。笑顔一択にしない --- */
+const EXPRESSIONS = {
+  serious:"Serious and unsmiling, a steady direct gaze, squared shoulders.",
+  evaluating:"Neutral expression with slight tension around the brows, an evaluating gaze directly at the camera.",
+  bright:"An open genuine smile showing teeth, bright engaged eyes.",
+  hesitant:"A slightly hesitant smile, attentive posture, leaning very slightly forward.",
+  gentle:"A gentle closed-mouth smile, relaxed eyes, a slight tilt of the head.",
+  def:"A calm closed-mouth smile with relaxed, attentive eyes looking at the camera."
+};
+/* 各案が「主軸に置いた属性」（配列の先頭）から判定する。
+   includes() で全体を見ると5案とも同じ表情になり、並べたとき同一人物に見えてしまう。 */
+const EXPR_MAP={
+  taiikukai:"serious", stress:"serious", volume:"serious",
+  logic:"evaluating", logic2:"evaluating", issue:"evaluating", pro:"evaluating",
+  growth:"bright", zero:"bright", global:"bright", startup:"bright", lead:"bright", intern:"bright",
+  honest:"gentle", listen:"gentle", empathy:"gentle", team:"gentle", social:"gentle", baito:"gentle",
+  stable:"hesitant", wlb:"hesitant", local:"hesitant", edu:"hesitant", grit:"hesitant", kenkyu:"evaluating"
+};
+const EXPR_WHY={
+  serious:"現場のプロ・職人気質", evaluating:"慎重・分析的", bright:"前向き・挑戦志向",
+  hesitant:"若手・学習中", gentle:"面倒見が良い・協調的", def:"既定"
+};
+const LABEL_OF=(gid,v)=>((GROUPS.find(g=>g.id===gid)||{opts:[]}).opts.find(o=>o.v===v)||{}).t||v;
+function expressionFor(p){
+  const S=p.st.stance,K=p.st.skill,E=p.st.exp;
+  const head=[["stance",S[0]],["skill",K[0]],["exp",E[0]],["stance",S[1]],["skill",K[1]]];
+  for(const [gid,v] of head){
+    if(v&&EXPR_MAP[v]) return {k:EXPR_MAP[v],t:EXPRESSIONS[EXPR_MAP[v]],
+      why:`${LABEL_OF(gid,v)} →「${EXPR_WHY[EXPR_MAP[v]]}」`};
+  }
+  if(p.layer==="stable") return {k:"hesitant",t:EXPRESSIONS.hesitant,why:"定着重視層 →「若手・学習中」"};
+  return {k:"def",t:EXPRESSIONS.def,why:"既定"};
+}
+
+/* --- 小道具：1人1つまで。情報収集行動から --- */
+const PROPS={
+  smartphone:"Holding a smartphone at chest height.",
+  document:"Holding a printed document.",
+  laptop:"One hand resting on an open laptop.",
+  none:"Arms relaxed at {poss} sides, holding nothing."
+};
+/* 該当する候補を集め、案ごとにずらして配る。全員同じ小道具だと写真が単調になる。 */
+function propFor(p,idx){
+  const c=[];
+  if(p.st.exp.includes("program")||p.st.exp.includes("intern")) c.push("laptop");
+  if(p.st.exp.includes("kenkyu")) c.push("document");
+  if(p.st.info.includes("ai")||p.st.info.includes("scout")) c.push("smartphone");
+  c.push("none");
+  return c[idx % c.length];
+}
+
+/* --- 髪：セット内で似た顔にならないよう散らす --- */
+const HAIR={
+  m:["short straight black hair, neatly cut",
+     "short dark brown hair, neatly cut",
+     "short black hair with a clean side part"],
+  f:["shoulder-length straight black hair",
+     "shoulder-length softly highlighted brown hair",
+     "dark brown hair tied back neatly",
+     "chin-length straight dark brown hair"]
+};
+
+/* --- プロンプト組み立て --- */
+function buildPortraitPrompt(p,idx){
+  const g=p.gender==="f"?"woman":"man";
+  const poss=p.gender==="f"?"her":"his";
+  const subj=p.gender==="f"?"She":"He";
+  const ageKey=(p.age.match(/(\d+)/)||[,"21"])[1];
+  const age=(AGE_LOOK[ageKey]||AGE_LOOK["21"]).replace(/\{poss\}/g,poss);
+  const r=rng(p.seed^0x5eed);
+  const hair=HAIR[p.gender==="f"?"f":"m"][Math.floor(r()*HAIR[p.gender==="f"?"f":"m"].length)];
+  const soft=SOFT_IND.includes(p.st.company.industry);
+  const gk=p.gender==="f"?"f":"m";
+  // リクルートスーツが前提なので大きくは変えられない。案ごとに細部だけずらす。
+  const VAR={ m:["with a plain dark navy tie","with a plain charcoal tie","with a subtle dark burgundy tie"],
+              f:["with a plain white blouse","with a soft off-white blouse","with a pale grey blouse"] };
+  const wardrobe = WARDROBE[gk][soft?"soft":"base"].replace(
+      gk==="m" ? /with a plain dark navy tie/ : /over a white blouse/,
+      gk==="m" ? VAR.m[idx%VAR.m.length] : "over a "+VAR.f[idx%VAR.f.length].replace("with a ",""));
+  const setting=SETTINGS[idx%SETTINGS.length];
+  const expr=expressionFor(p);
+  const propKey=propFor(p,idx);
+  const prop=PROPS[propKey].replace(/\{poss\}/g,poss);
+  const subject=`of a Japanese ${g} ${age}, East Asian features, natural Japanese complexion, ${hair}, ${wardrobe}.`;
+  const text=[`${FIXED_SHOT} ${subject}`,expr.t,prop,`${subj} is ${setting}.`,
+              FIXED_LIGHTING,FIXED_CAMERA,FIXED_NEGATIVE].join(" ");
+  return {text, meta:{hair,wardrobe,setting,expression:expr,prop:propKey}};
+}
+
+/* --- Gemini 画像生成API（Interactions） --- */
+async function geminiPortrait(prompt){
+  const res=await fetch("https://generativelanguage.googleapis.com/v1beta/interactions",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","x-goog-api-key":settings.geminiKey},
+    body:JSON.stringify({
+      model:settings.geminiModel,
+      input:[{type:"text",text:prompt}],
+      response_format:{type:"image",aspect_ratio:"1:1",image_size:settings.geminiSize}
+    })
+  });
+  if(!res.ok) throw new Error("HTTP "+res.status+" "+(await res.text()).slice(0,180));
+  const j=await res.json();
+  // steps[] → model_output → content[] → image  を走査（output_image はSDK側の便宜プロパティ）
+  let img=j?.output_image||null;
+  if(!img){
+    for(const st of (j.steps||[])){
+      for(const c of (st.content||[])){ if(c.type==="image"&&c.data) img=c; }
+    }
+  }
+  if(!img||!img.data) throw new Error("画像が返りませんでした（安全フィルタの可能性）");
+  return `data:${img.mime_type||"image/png"};base64,${img.data}`;
+}
+
+/* --- 5人分を順に生成（1リクエスト＝1枚。N人はN回呼ぶ） --- */
+async function generatePortraits_unused(){
+  if(!settings.geminiKey){ toast("設定画面で Gemini APIキーを入力してください"); goNav("set"); return; }
+  const btn=$("#photoBtn"); if(btn){btn.disabled=true;}
+  let ok=0,fail=0;
+  for(let i=0;i<cands.length;i++){
+    const p=cands[i];
+    setPhotoStat(`生成中… ${i+1}/${cands.length}（${p.name}）`);
+    try{ p.photo=await geminiPortrait(buildPortraitPrompt(p,i).text); ok++; }
+    catch(e){ fail++; console.warn("portrait failed",p.name,e); }
+    renderDash();
+  }
+  if(btn) btn.disabled=false;
+  setPhotoStat(fail? `${ok}件成功／${fail}件失敗。失敗分はイラストのまま表示しています。`
+                   : `${ok}件の顔写真を生成しました。`);
+  if(!ok) toast("生成に失敗しました。設定のキー／モデルとネットワークをご確認ください");
+}
+function setPhotoStat(t){ const el=$("#photoStat"); if(el) el.textContent=t; }
+
+/* --- dry-run：課金前にプロンプトを確認する --- */
+function showPrompts(){
+  if(!cands.length){ toast("先にペルソナを生成してください"); return; }
+  const body=cands.map((p,i)=>{
+    const b=buildPortraitPrompt(p,i);
+    return `── ${PID(i)} ${p.name}（${p.gender==="f"?"女性":"男性"}・${p.age}）
+表情の根拠：${b.meta.expression.why}
+小道具：${b.meta.prop} ／ 背景：${b.meta.setting}
+
+${b.text}`;
+  }).join("\n\n");
+  const est=(cands.length*({"gemini-3-pro-image":0.134,"gemini-3.1-flash-image":0.101,"gemini-3.1-flash-lite-image":0.0336}[settings.geminiModel]||0.134)).toFixed(2);
+  $("#promptDump").value=body;
+  $("#promptCost").textContent=`${cands.length}枚 × ${settings.geminiModel} ＝ 概算 $${est}（画像モデルに無料枠はありません）`;
+  $("#promptBox").classList.remove("hidden");
+}
+
+/* --- 一括生成用 personas.json の書き出し（scripts/generate_personas.py 入力形式） --- */
+const PID=i=>"p"+String(i+1).padStart(2,"0");
+function exportPersonasJson(){
+  if(!cands.length){ toast("先にペルソナを生成してください"); return; }
+  const out={_note:"HR Persona Voice AI から書き出し。python generate_personas.py personas.json --out ./personas --sizes 512,256,128",
+    personas:cands.map((p,i)=>{
+      const b=buildPortraitPrompt(p,i);
+      return {
+        id:PID(i), name:p.name, age:parseInt((p.age.match(/(\d+)/)||[,21])[1],10),
+        gender:p.gender==="f"?"female":"male",
+        role:`${p.grad} ${p.st.company.job}志望`,
+        industry:p.st.company.industry,
+        company_size:p.st.company.size,
+        personality:p.lead.slice(0,80),
+        pain:(p.fears[0]&&p.fears[0].label)||"就職先を決めきれない",
+        relation_to_product:p.layerLabel,
+        hair:b.meta.hair, wardrobe:b.meta.wardrobe, setting:b.meta.setting,
+        expression:b.meta.expression.t, prop:b.meta.prop
+      };
+    })};
+  const blob=new Blob([JSON.stringify(out,null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="personas.json"; a.click();
+  toast("personas.json を書き出しました");
+}
+
+/* --- 一括生成した画像の取り込み（p01_512.jpg などを選択） --- */
+function importPhotos(files){
+  let n=0;
+  [...files].forEach(f=>{
+    const m=f.name.match(/p(\d{2})/i); if(!m) return;
+    const i=parseInt(m[1],10)-1; if(!cands[i]) return;
+    const fr=new FileReader();
+    fr.onload=()=>{ cands[i].photo=fr.result; renderDash(); if(current===cands[i]) renderPersona(current); };
+    fr.readAsDataURL(f); n++;
+  });
+  setPhotoStat(n? `${n}件の画像を読み込みました（ファイル名の p01〜 で対応付け）` : "p01_512.jpg のような名前の画像を選択してください");
+}
+</script>
+<script>
+/* =====================================================================
+   サーバーAPIクライアント
+   ブラウザ → Node(server.js) → OpenAI / 画像生成API → 画像 → ブラウザ
+   APIキーはブラウザ側に一切持たない。
+   ===================================================================== */
+const API_BASE = /^https?:$/.test(location.protocol) ? "" : "http://localhost:8787";
+const srv = { ok:false, hasOpenAI:false, hasGemini:false, imageProvider:"", imageModel:"", textModel:"", mock:true };
+
+async function api(pathname, payload, timeoutMs){
+  const ctl=new AbortController();
+  const t=setTimeout(()=>ctl.abort(), timeoutMs||180000);
+  try{
+    const res=await fetch(API_BASE+pathname,{method:"POST",signal:ctl.signal,
+      headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    const j=await res.json().catch(()=>({error:"応答を解釈できませんでした"}));
+    if(!res.ok) throw new Error(j.error||("HTTP "+res.status));
+    return j;
+  }catch(e){
+    if(e.name==="AbortError") throw new Error("タイムアウトしました");
+    if(e instanceof TypeError) throw new Error("サーバーに接続できません（node server.js は起動していますか）");
+    throw e;
+  }finally{ clearTimeout(t); }
+}
+
+async function checkServer(){
+  try{
+    const r=await fetch(API_BASE+"/api/health",{cache:"no-store"});
+    if(!r.ok) throw 0;
+    Object.assign(srv, await r.json(), {ok:true});
+  }catch(e){ srv.ok=false; srv.hasOpenAI=false; }
+  renderServerBadge();
+  return srv.ok;
+}
+
+function renderServerBadge(){
+  const el=$("#srvBadge");
+  /* 画面上でいちばん知りたいのは「今この瞬間、実写の顔写真が出るのか」なので、
+     テキストAIの有無ではなく画像側の状態を主に出す。 */
+  const photoLine = srv.hasGemini
+    ? `<span style="color:var(--good)">実写生成が有効です（${esc(srv.imageModel)}／${esc(srv.portraitSize||"")}）</span>`
+    : srv.poolCount
+      ? `<span style="color:var(--s2)">GEMINI_API_KEY 未設定 — 事前生成プール ${srv.poolCount}枚 から割り当てます</span>`
+      : `<span style="color:var(--s2)">GEMINI_API_KEY 未設定 — プレースホルダを表示します。実写にするには
+         <code>export GEMINI_API_KEY=…</code> を設定してサーバーを起動し直してください</span>`;
+
+  const line = !srv.ok
+    ? `<span style="color:var(--ink-3)">○ サーバー未接続 — 顔写真は生成できません。
+       <code>node standalone/server.js</code> を起動し <b>http://localhost:8787</b> を開いてください。</span>`
+    : `<span style="color:${srv.hasGemini?"var(--good)":"var(--s2)"};font-weight:700">● 接続済み</span>
+       <span style="color:var(--ink-3)">顔写真：${photoLine}<br>
+       ペルソナ本文：${esc(srv.textModel)}${srv.hasOpenAI?"":"（ANTHROPIC_API_KEY 未設定のためルールベース）"}<br>
+       APIキーはサーバーの環境変数からのみ読み込まれ、ブラウザには渡していません。</span>`;
+  if(el) el.innerHTML=line;
+  $$("[data-needai]").forEach(b=>{ b.disabled=!srv.ok; });
+  $$("[data-needkey]").forEach(b=>{ b.disabled=!(srv.ok&&srv.hasOpenAI); });
+  const chip=$("#srvChip");
+  if(chip){
+    chip.textContent = !srv.ok ? "サーバー未接続" : srv.hasGemini ? "実写生成 有効" : srv.poolCount ? "プール画像" : "画像キー未設定";
+    chip.style.background = !srv.ok ? "rgba(255,255,255,.12)" : srv.hasGemini ? "rgba(12,163,12,.35)" : "rgba(250,178,25,.35)";
+  }
+}
+
+/* ---------------- 条件のラベル化（サーバーに渡す用） ---------------- */
+function labelsOf(gid,arr){
+  const g=GROUPS.find(x=>x.id===gid)||{opts:[]};
+  return (arr||[]).map(v=>{const o=g.opts.find(o=>o.v===v);return o?o.t:v});
+}
+function conditionsPayload(){
+  const st=currentInput();
+  return {
+    layerLabel:(LAYER_META[st.layer]||{}).label,
+    stance:labelsOf("stance",st.stance), skill:labelsOf("skill",st.skill),
+    axis:labelsOf("axis",st.axis), fear:labelsOf("fear",st.fear),
+    exp:labelsOf("exp",st.exp), info:labelsOf("info",st.info)
+  };
+}
+
+/* ---------------- 機能1〜3：AIパイプライン ---------------- */
+function aiStat(t,cls){ const el=$("#aiStat"); if(el){el.textContent=t; el.style.color=cls||"var(--ink-3)";} }
+
+async function runAIPipeline(){
+  const btn=$("#aiBtn"); if(!btn) return;
+  btn.disabled=true; const old=btn.textContent; btn.textContent="生成中…";
+  const n=parseInt($("#aiCount").value,10)||3;
+  aiStat(`採用情報を読み込み、${n}人分のペルソナと画像を生成しています…（30〜90秒かかります）`);
+  try{
+    const st=currentInput();
+    const r=await api("/api/pipeline",{
+      url:($("#cUrl").value||"").trim()||undefined,
+      text:($("#cPaste").value||"").trim()||undefined,
+      company:{...st.company, grad:st.grad},
+      conditions:conditionsPayload(),
+      count:n
+    });
+    cands=r.results.map((x,i)=>adaptServerPersona(x,i,st));
+    candIdx=0; selectCand();
+    const mock=r.mock||r.results.some(x=>x.image&&x.image.mock);
+    aiStat(`${cands.length}人分を生成しました（テキスト：${r.model}／画像：${r.imageProvider}）`
+           +(mock?" — APIキー未設定のためモック内容です。UI確認用としてご覧ください。":""),
+           mock?"var(--s2)":"var(--good)");
+    if(r.sourcePages&&r.sourcePages.length) console.log("読み込んだページ:",r.sourcePages);
+  }catch(e){
+    aiStat("生成に失敗しました："+e.message,"var(--s2)");
+  }finally{ btn.disabled=false; btn.textContent=old; }
+}
+
+/* サーバーのペルソナを画面の表示モデルに合わせる */
+function adaptServerPersona(x,i,st){
+  const sp=x.persona||{}, img=x.image||{};
+  const L=LAYER_META[st.layer]||LAYER_META.top;
+  const seed=hash((sp.id||"")+(sp.name||"")+i);
+  const gender=sp.gender==="female"?"f":"m";
+
+  // マッチ度：人事が選んだ条件のラベルが、生成された人物像の記述に現れた割合
+  const sel=[...labelsOf("stance",st.stance),...labelsOf("skill",st.skill)];
+  const blob=[sp.summary,sp.personality,(sp.values||[]).join(),(sp.orientation||[]).join(),
+              (sp.job_axis||[]).join(),(sp.company_criteria||[]).join()].join(" ");
+  const key=s=>String(s).replace(/[・（）()]/g,"").slice(0,3);
+  const hit=sel.filter(s=>blob.includes(key(s))).length;
+  const match=Math.round(70+27*(sel.length?hit/sel.length:0.7));
+
+  const mkt={"安定した会社":55.4,"転勤がない":33.3,"給料が良い":26.6,"やりたい仕事ができる":25.5};
+  const hooks=sp.hooks||[];
+
+  return {
+    seed, gender, ai:sp, photo:img.dataUrl||img.url||null, imageInfo:img, promptInfo:x.prompt,
+    name:sp.name||"—", kana:sp.kana||"",
+    univ:[sp.university,sp.faculty].filter(Boolean).join(" "),
+    age:`${sp.age||21}歳（${sp.grade||"大学3年"}）`,
+    grad:(st.grad||"").split("（")[0],
+    layer:st.layer, layerLabel:L.label, badge:L.badge, progress:L.prog,
+    lead:sp.summary||sp.personality||"",
+    voices:(sp.voices||[]).map(v=>({t:v.text||v.t||"",tag:v.tag||"生の声"})).filter(v=>v.t),
+    axes:(sp.job_axis||[]).map((a,k)=>({label:a,line:(sp.company_criteria||[])[k]||"",m:mkt[a]})),
+    fears:(sp.pain_points||[]).map((f,k)=>({label:f,topic:f,
+      counter:(hooks[k]&&hooks[k].message)||"面談で判断材料を個別に開示する"})),
+    exps:[], infos:sp.info_channels||[], channels:[],
+    evals:st.skill.map(v=>({label:SKILL_TXT[v].label,ev:SKILL_TXT[v].ev})),
+    hitWords:[...(sp.values||[]),...(sp.orientation||[])].slice(0,7),
+    missWords:sp.anti_hooks||["若手が活躍できる環境です","アットホームな職場です"],
+    radar:scoreRadar(st),
+    match, variant:sp.fit_reason?("AI生成｜"+String(sp.fit_reason).slice(0,50)):"AI生成",
+    st:{...st}
+  };
+}
+
+/* ---------------- 個別に画像だけ再生成 ---------------- */
+async function regenPhoto(){
+  const p=cands[candIdx]; if(!p) return;
+  const btn=$("#imgBtn"); if(btn){btn.disabled=true;btn.textContent="生成中…";}
+  aiStat(`${p.name} の画像を生成しています…`);
+  try{
+    const r=await api("/api/persona/image",photoPayload(p,candIdx));
+    p.photo=r.dataUrl||r.url||null; p.imageInfo=r; p.promptInfo={prompt:r.prompt};
+    renderDash(); renderPersona(p);
+    aiStat(r.mock?`モック画像を表示しました（${r.note||"画像APIキー未設定"}）`:`顔写真を生成しました（${r.provider}）`,
+           r.mock?"var(--s2)":"var(--good)");
+  }catch(e){ aiStat("画像生成に失敗しました："+e.message,"var(--s2)"); }
+  finally{ if(btn){btn.disabled=false;btn.textContent="この人の顔写真を生成";} }
+}
+
+/* サーバーに渡す画像リクエスト。
+   AI生成ペルソナはサーバー側でプロンプトを組み直せるので persona をそのまま渡す。
+   ローカル生成のペルソナは属性がサーバーの想定形と違うので、
+   画面側で組んだプロンプトを送る。index は可変ブロックの振り分けに使われる。 */
+function photoPayload(p,i){
+  return p.ai
+    ? {persona:p.ai, index:i}
+    : {prompt:buildPortraitPrompt(p,i).text, index:i,
+       persona:{id:"p"+String(i+1).padStart(2,"0"),name:p.name,gender:p.gender==="f"?"female":"male"}};
+}
+
+/* ---------------- 全員分の顔写真をまとめて生成 ----------------
+   画像は 1リクエスト＝1枚なので人数分を順に呼ぶ。1人失敗しても止めず、
+   失敗した分はイラストのまま残して最後に件数を出す。 */
+async function regenAllPhotos(){
+  if(!cands.length){ toast("先にペルソナを生成してください"); return; }
+  const btn=$("#allImgBtn"); if(btn){btn.disabled=true;btn.textContent="生成中…";}
+  let ok=0; const failed=[];
+  for(let i=0;i<cands.length;i++){
+    const p=cands[i];
+    setPhotoStat(`生成中… ${i+1}/${cands.length}（${p.name}）— 1枚あたり10〜20秒かかります`);
+    try{
+      const r=await api("/api/persona/image",photoPayload(p,i));
+      p.photo=r.dataUrl||r.url||null; p.imageInfo=r; p.promptInfo={prompt:r.prompt};
+      ok++;
+    }catch(e){ failed.push(p.name); console.warn("portrait failed",p.name,e); }
+    renderDash(); if(i===candIdx) renderPersona(p);
+  }
+  if(btn){btn.disabled=false;btn.textContent="全員の顔写真を生成";}
+  setPhotoStat(failed.length
+    ? `${ok}件成功／${failed.length}件失敗（${failed.join("・")}）。失敗分はイラストのまま表示しています。`
+    : `${ok}件の顔写真を生成しました。`);
+}
+
+/* ---------------- 画像プロンプトの確認（機能2の出力） ---------------- */
+async function showAIPrompt(){
+  const p=cands[candIdx]; if(!p){toast("先にペルソナを生成してください");return}
+  $("#promptBox").classList.remove("hidden");
+  $("#promptCost").textContent="生成中…";
+  $("#promptDump").value="";
+  try{
+    let info=p.promptInfo;
+    if(!info||!info.prompt){
+      if(p.ai) info=await api("/api/persona/prompt",{persona:p.ai});
+      else info={prompt:buildPortraitPrompt(p,candIdx).text,variable:{rationale:"ローカル組み立て（AI未使用）"}};
+      p.promptInfo=info;
+    }
+    $("#promptCost").textContent=(info.variable&&info.variable.rationale)?("設計意図："+info.variable.rationale):"";
+    $("#promptDump").value=`── ${p.name}\n\n${info.prompt}`;
+  }catch(e){ $("#promptCost").textContent="取得に失敗しました："+e.message; }
+}
+
+/* ---------------- 採用要件の AI 診断 ---------------- */
+async function runRequirementAnalysis(){
+  const host=$("#reqHost"); if(!host) return;
+  const btn=$("#reqBtn"); btn.disabled=true; const old=btn.textContent; btn.textContent="分析中…";
+  host.innerHTML=`<p class="hint" style="margin:0">AIが要件を読み込んでいます…</p>`;
+  try{
+    const st=currentInput();
+    const r=await api("/api/analyze/requirements",{
+      input:{company:st.company,grad:st.grad,...conditionsPayload()},
+      market:MARKET.select.concat(MARKET.avoid)
+    });
+    host.innerHTML=renderReqResult(r);
+  }catch(e){ host.innerHTML=`<p class="hint" style="margin:0;color:var(--s2)">分析に失敗しました：${esc(e.message)}</p>`; }
+  finally{ btn.disabled=false; btn.textContent=old; }
+}
+function renderReqResult(r){
+  const lv=(r.rarity&&r.rarity.level)||"—";
+  const col=lv==="高"?"var(--crit)":lv==="中"?"var(--warn)":"var(--good)";
+  const list=(arr,f)=>(arr&&arr.length)?`<ul style="margin:6px 0 0;padding-left:18px;font-size:12.5px;line-height:1.85">${arr.map(f).join("")}</ul>`:`<p class="hint" style="margin:6px 0 0;font-size:12px">該当なし</p>`;
+  return `<div class="emolog" style="border-left-color:var(--s1);margin-bottom:10px">
+      <b style="font-size:13px">${esc(r.verdict||"")}</b><s>AI診断（${esc(srv.textModel)}）</s></div>
+    <div class="metric" style="margin-bottom:12px">
+      <div class="top"><b>母集団形成の難易度</b><span style="color:${col}">${esc(lv)}</span></div>
+      <p style="margin:2px 0 0;font-size:12px;color:var(--ink-2);line-height:1.8">${esc((r.rarity&&r.rarity.reason)||"")}</p></div>
+    <div style="margin-bottom:12px"><div class="eyebrow">条件の矛盾</div>
+      ${list(r.conflicts,c=>`<li><b>${esc((c.items||[]).join(" × "))}</b><br>${esc(c.why||"")}<br><span style="color:var(--s1)">→ ${esc(c.suggestion||"")}</span></li>`)}</div>
+    <div style="margin-bottom:12px"><div class="eyebrow">抜けている観点</div>
+      ${list(r.missing,m=>`<li><b>${esc(m.point||"")}</b> — ${esc(m.why||"")}</li>`)}</div>
+    <div style="margin-bottom:12px"><div class="eyebrow">スカウトで強調すべき点</div>
+      ${list(r.emphasis,m=>`<li><b>${esc(m.point||"")}</b><br>${esc(m.how||"")}</li>`)}</div>
+    ${r.market_gap?`<div style="margin-bottom:12px"><div class="eyebrow">市場実勢とのズレ</div>
+      <p style="margin:6px 0 0;font-size:12.5px;line-height:1.85">${esc(r.market_gap)}</p></div>`:""}
+    ${(r.risks&&r.risks.length)?`<div class="warnbox"><b>このまま進めた場合のリスク</b><br>${r.risks.map(x=>"・"+esc(x)).join("<br>")}</div>`:""}`;
+}
+
+/* ---------------- スカウト文の AI 添削 ---------------- */
+async function runScoutCritique(){
+  const host=$("#critHost"); if(!host||!current||!currentCreative) return;
+  const btn=$("#critBtn"); btn.disabled=true; const old=btn.textContent; btn.textContent="添削中…";
+  host.innerHTML=`<p class="hint" style="margin:0">AIが本文を読んでいます…</p>`;
+  try{
+    const r=await api("/api/analyze/scout",{
+      persona:{name:current.name,age:current.age,layerLabel:current.layerLabel,lead:current.lead,
+               axes:current.axes,fears:current.fears},
+      subject:currentCreative.subjects[0].t, body:currentCreative.body});
+    host.innerHTML=renderCritique(r);
+  }catch(e){ host.innerHTML=`<p class="hint" style="margin:0;color:var(--s2)">添削に失敗しました：${esc(e.message)}</p>`; }
+  finally{ btn.disabled=false; btn.textContent=old; }
+}
+function renderCritique(r){
+  const sc=Math.max(1,Math.min(10,parseInt(r.overall,10)||5));
+  return `<div class="metric" style="margin-bottom:14px">
+      <div class="top"><b>AI総合評価</b><span>${sc}/10</span></div>
+      <div class="tr"><i style="width:${sc*10}%"></i></div>
+      <p style="margin:6px 0 0;font-size:13px;line-height:1.8">${esc(r.one_line||"")}</p></div>
+    ${(r.strengths&&r.strengths.length)?`<div style="margin-bottom:14px"><div class="eyebrow">良い点</div>
+      <ul style="margin:6px 0 0;padding-left:19px;font-size:13.5px;line-height:1.85">${r.strengths.map(s=>`<li>${esc(s)}</li>`).join("")}</ul></div>`:""}
+    ${(r.issues&&r.issues.length)?`<div style="margin-bottom:14px"><div class="eyebrow">改善点</div>
+      ${r.issues.map(i=>`<div class="ngok" style="margin-top:8px">
+        <div class="ng"><h6>指摘（本文より引用）</h6><p>「${esc(i.quote||"")}」<br><span style="color:var(--ink-3);font-size:12.5px">${esc(i.problem||"")}</span></p></div>
+        <div class="ok"><h6>書き換え案</h6><p>${esc(i.fix||"")}</p></div></div>`).join("")}</div>`:""}
+    ${r.rewrite_subject?`<div style="margin-bottom:10px"><div class="eyebrow">件名の改善案</div>
+      <div class="subj" style="margin-top:6px"><em>AI</em><span>${esc(r.rewrite_subject)}</span></div></div>`:""}
+    ${r.rewrite_opening?`<div><div class="eyebrow">書き出しの改善案</div>
+      <div class="mail" style="margin-top:6px;background:var(--surface-1);border:1px solid var(--hair);border-radius:10px;padding:12px 14px">${esc(r.rewrite_opening)}</div></div>`:""}
+    <p class="hint" style="margin:12px 0 0;font-size:11px">AIによる定性評価です。返信率の予測ではありません。実際の効果はA/Bテストで検証してください。</p>`;
+}
+</script>
+<script>
+/* ================= 候補生成（同一条件から5パターン） ================= */
+const rot=(a,n)=>a.length?a.slice(n%a.length).concat(a.slice(0,n%a.length)):a;
+
+function buildCandidates(base){
+  const list=[];
+  for(let i=0;i<5;i++){
+    const st={...base};
+    // i>0 は重視軸をずらし、一部を落とす＝「解釈のバリエーション」
+    const drop = i===0?0 : (i%2===0?1:0);
+    st.stance = rot(base.stance,i).slice(0, Math.max(2, base.stance.length-drop));
+    st.skill  = rot(base.skill ,i).slice(0, Math.max(2, base.skill.length -drop));
+    st.axis   = rot(base.axis  ,i);
+    st.fear   = rot(base.fear  ,i);
+    st.exp    = rot(base.exp   ,i);
+    st.info   = base.info;
+    const seed = hash(JSON.stringify(st)+"#"+i);
+    const p = buildPersona(st,seed);
+    // マッチ度＝自社が選んだ条件のうち、この人物像がカバーしている割合
+    const need = base.stance.length + base.skill.length;
+    const got  = st.stance.filter(v=>base.stance.includes(v)).length
+               + st.skill .filter(v=>base.skill .includes(v)).length;
+    p.match = Math.round(72 + 25*(got/Math.max(1,need)) - (i? rng(seed)()*4 : 0));
+    const lb=(GROUPS.find(x=>x.id==="stance").opts.find(o=>o.v===st.stance[0])||{}).t||"";
+    p.variant = i===0 ? "本命（条件を全て満たす）" : `第${i+1}案：「${lb}」を主軸に解釈`;
+    list.push(p);
+  }
+  return list.sort((a,b)=>b.match-a.match);
+}
+
+/* ================= 分析ラボ：スカウト文の採点 ================= */
+function scoreCopy(p,c){
+  const body=c.body, co=p.st.company;
+  const sentences=body.split(/[。\n]/).filter(s=>s.trim().length>4);
+  const avgLen=sentences.reduce((a,s)=>a+s.length,0)/Math.max(1,sentences.length);
+  // インパクト：数字・固有名詞・具体語の密度
+  const impactHits=(body.match(/[0-9０-９]+|年目|担当|案件|顧客|実際|そのまま|数字/g)||[]).length;
+  // 自分ごと化：ペルソナの軸・不安・経験の語が本文に出るか
+  const keys=[...p.axes.map(a=>a.label),...p.fears.map(f=>f.label),...p.exps];
+  const relHits=keys.filter(k=>body.includes(k.slice(0,4))).length;
+  // ブランド適合：自社の強みの語が使われているか
+  const sw=(co.strength||"").replace(/[、。\s]/g," ").split(" ").filter(w=>w.length>=3);
+  const brandHits=sw.filter(w=>body.includes(w)).length;
+  const clamp=(x)=>Math.max(1,Math.min(10,Math.round(x)));
+  return [
+    {k:"インパクト",       v:clamp(impactHits*0.55+3), why:`具体語・数字が${impactHits}箇所`},
+    {k:"Clarity（可読性）", v:clamp(13-avgLen/6),        why:`1文あたり平均${Math.round(avgLen)}文字`},
+    {k:"Relevance（自分ごと化）", v:clamp(4+relHits*1.6), why:`ペルソナ固有の論点に${relHits}箇所で言及`},
+    {k:"Brand（ブランド適合）",  v:clamp(brandHits?5+brandHits*2:4), why:brandHits?`自社の強みの語を${brandHits}箇所で引用`:"自社の強みが本文に反映されていません"}
+  ];
+}
+
+/* ================= ダッシュボード描画 ================= */
+function renderDash(){
+  $("#cands").innerHTML=cands.map((p,i)=>`
+    <button class="cand ${i===candIdx?"on":""}" data-c="${i}">
+      <div class="th">${faceHTML(p,{w:44,h:48,lazy:true,alt:""})}</div>
+      <div style="min-width:0"><b>${esc(p.name)}</b><s>${esc(p.grad)}／${esc(p.layerLabel.split("：")[1]||"")}</s></div>
+      <span class="sc">${p.match}</span>
+    </button>`).join("");
+  $$("#cands .cand").forEach(b=>b.onclick=()=>{candIdx=+b.dataset.c;selectCand()});
+  renderHero(); renderLab();
+}
+function renderHero(){
+  const p=cands[candIdx];
+  $("#heroHost").innerHTML=`<div class="hero">
+    <div class="ph" id="heroPhoto">${faceHTML(p,{w:372,h:372,crop:true})}</div>
+    <div class="match"><span>マッチ度</span><span class="n">${p.match}<small>/100</small></span></div>
+    <div class="in">
+      <h4>${esc(p.name)}</h4>
+      <div class="sub2">${esc(p.age)}／${esc(p.univ)}<br>${esc(p.st.company.area)}・${esc(p.st.company.job)}志望　|　${esc(p.variant)}</div>
+      <div class="eyebrow" style="margin:12px 0 6px">SUMMARY</div>
+      <p class="sm">${esc(p.lead)}</p>
+      <div class="eyebrow" style="margin:12px 0 6px">VOICE</div>
+      <p class="sm" style="font-style:normal">「${esc(p.voices[0]?p.voices[0].t:"")}」</p>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn ghost sm" id="toDetail" type="button">詳細分析を見る</button>
+        <button class="btn ghost sm" id="toCreative" type="button">スカウト文を見る</button>
+      </div>
+      <p class="hint" style="margin:10px 0 0;font-size:10.5px">※画像はイメージです。AI生成であり、実在の人物ではありません。</p>
+    </div></div>`;
+  $("#toDetail").onclick=()=>goNav("lab");
+  $("#toCreative").onclick=()=>goNav("mail");
+  if(settings.imgMode==="openai"&&settings.apiKey&&!p.photo) fetchPhoto(p);
+}
+function renderLab(){
+  const p=cands[candIdx], c=buildCreative(p), sc=scoreCopy(p,c);
+  const emo=[
+    // AI生成ペルソナ／ルールベース双方に対応（条件未選択でも落ちないようにする）
+    (p.fears[0] ? {t:(FEAR_TXT[p.st.fear[0]]&&FEAR_TXT[p.st.fear[0]].voice)||`${p.fears[0].label}——そこが引っかかっています。`, s:"不安"} : null),
+    p.voices.find(v=>v.tag==="就活の軸"),
+    {t:`${p.st.company.name}という会社、正直まだよく知らないです。でも「1年目に何をするか」を具体的に書いてくれたのは他社と違いました。`,s:"スカウト受信時の反応"}
+  ].filter(Boolean);
+  $("#labHost").innerHTML=`
+    <div class="lab"><h5>Current Campaign Analysis</h5>
+      <div class="draft"><b>JOB DRAFT 01</b><br>${esc(c.copies[0].t)}<br>
+        <span style="color:var(--ink-3);font-size:11.5px">${esc(c.copies[0].s)}</span></div></div>
+    <div class="lab"><h5>Emotion Log</h5>
+      ${emo.map(e=>`<div class="emolog">${esc(e.t||e.text||"")}<s>${esc(e.s||e.tag||"")}</s></div>`).join("")}</div>
+    <div class="lab"><h5>Score Metrics</h5>
+      <p style="font-size:11.5px;color:var(--ink-3);margin:0 0 10px;line-height:1.7">生成したスカウト本文を4観点で自動採点しています（10点満点）。</p>
+      ${sc.map(m=>`<div class="metric">
+        <div class="top"><b>${esc(m.k)}</b><span>${m.v}/10</span></div>
+        <div class="tr"><i style="width:${m.v*10}%"></i></div>
+        <div style="font-size:10.5px;color:var(--ink-3);margin-top:3px">${esc(m.why)}</div>
+      </div>`).join("")}
+      <div class="warnbox" style="margin-top:10px">スコアは本文の構造から機械的に算出した参考値です。実際の返信率とは別に、A/Bテストでの検証が必要です。</div>
+    </div>`;
+}
+function selectCand(){
+  current=cands[candIdx]; currentCreative=buildCreative(current);
+  renderDash(); renderPersona(current); renderCreative(current,currentCreative);
+}
+
+/* ================= 画像生成API（任意） ================= */
+async function fetchPhoto(p){
+  const host=$("#heroPhoto"); if(!host)return;
+  const prompt=`Professional Japanese university student headshot for a corporate ID photo, ${p.gender==="f"?"female":"male"}, early 20s, neutral studio background, business suit, natural lighting, front facing, friendly neutral expression, photorealistic`;
+  try{
+    host.insertAdjacentHTML("beforeend",`<div id="imgLoad" style="position:absolute;inset:0;display:grid;place-items:center;font-size:12px;background:rgba(255,255,255,.7)">実写を生成中…</div>`);
+    const res=await fetch("https://api.openai.com/v1/images/generations",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+settings.apiKey},
+      body:JSON.stringify({model:"gpt-image-1",prompt,size:"1024x1024",n:1})
+    });
+    const j=await res.json();
+    const b64=j?.data?.[0]?.b64_json;
+    if(b64) host.innerHTML=`<img src="data:image/png;base64,${b64}" style="width:100%;display:block" alt="AI生成のポートレート（実在しません）">`;
+    else { $("#imgLoad")?.remove(); toast("画像生成に失敗しました（イラストを表示）"); }
+  }catch(e){ $("#imgLoad")?.remove(); toast("画像APIに接続できませんでした（イラストを表示）"); }
+}
+
+/* ================= 生成フロー ================= */
+function generate(){
+  const base=currentInput();
+  cands=buildCandidates(base); candIdx=0; selectCand();
+  if(mode==="wiz") goStep(2);
+  toast("5パターンのペルソナを生成しました");
+}
+
+/* ================= 初期化 ================= */
+function fill(sel,arr,ph){$(sel).innerHTML=(ph?`<option value="">${ph}</option>`:"")+arr.map(x=>`<option>${esc(x)}</option>`).join("")}
+function emptyState(){
+  $("#cands").innerHTML="";
+  $("#heroHost").innerHTML=`<div class="hero" style="max-width:none"><div class="in" style="padding:34px 26px;text-align:center">
+    <div style="font-size:34px;line-height:1;margin-bottom:12px">🗒️</div>
+    <h4 style="font-size:16px">まだペルソナがありません</h4>
+    <p class="sm" style="margin-top:8px">左のパネルで <b>企業サイトのURL</b> を読み取るか、自社情報を入力し、<br>
+      チェック項目を選んで「ペルソナを生成」を押してください。</p>
+    <p class="hint" style="margin-top:12px;font-size:11.5px">試すだけなら「サンプル条件」ボタンで一式が入ります。</p>
+  </div></div>`;
+  $("#labHost").innerHTML=`<div class="lab"><h5>Score Metrics</h5>
+    <p style="font-size:12px;color:var(--ink-3);line-height:1.8">ペルソナを生成すると、スカウト文の採点結果がここに表示されます。</p></div>`;
+}
+function init(){
+  fill("#cInd",IND,"未選択");fill("#cJob",JOBS,"未選択");fill("#cSize",SIZE,"未選択");fill("#cGrad",GRAD);
+  renderNav();renderForm();renderSteps();emptyState();
+  checkServer();
+  ["#cName","#cArea","#cStrength"].forEach(s=>$(s).addEventListener("input",syncCounts));
+  ["#cJob"].forEach(s=>$(s).addEventListener("change",syncCounts));
+  $("#promptBtn").onclick=showAIPrompt;
+  $("#expJson").onclick=exportPersonasJson;
+  $("#impPhotos").onchange=e=>importPhotos(e.target.files);
+  $("#copyPrompt").onclick=()=>copyText($("#promptDump").value);
+  $("#closePrompt").onclick=()=>$("#promptBox").classList.add("hidden");
+  $("#aiBtn").onclick=runAIPipeline;
+  $("#imgBtn").onclick=regenPhoto;
+  $("#allImgBtn").onclick=regenAllPhotos;
+  $("#reqBtn").onclick=runRequirementAnalysis;
+  $("#critBtn").onclick=runScoutCritique;
+  $("#readUrl").onclick=readFromUrl;
+  $("#readPaste").onclick=readFromPaste;
+  $("#cUrl").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();readFromUrl()}});
+
+  $("#nav").addEventListener("click",e=>{const b=e.target.closest("[data-nav]");if(b)goNav(b.dataset.nav)});
+  $$("[data-mode]").forEach(b=>b.onclick=()=>{
+    mode=b.dataset.mode; syncMode();
+    if(mode==="dash"){navKey="lib";renderNav();show("vDash")}
+    else{show("vWiz");goStep(current?2:1)}
+  });
+  $("#steps").addEventListener("click",e=>{const b=e.target.closest("[data-step]");if(b)goStep(+b.dataset.step)});
+  $("#genBtn").onclick=generate;
+  $("#genBtn2").onclick=generate;
+  $("#regenBtn").onclick=()=>{candIdx=(candIdx+1)%cands.length;selectCand();toast("別パターンに切り替えました")};
+  $("#toS3").onclick=()=>goStep(3);
+  $("#backS1").onclick=()=>goStep(1);
+  $("#backS2").onclick=()=>goStep(2);
+  $("#printBtn").onclick=()=>window.print();
+  $("#dlBtn").onclick=()=>{
+    const blob=new Blob([JSON.stringify({personas:cands,creative:currentCreative},null,2)],{type:"application/json"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+    a.download=`persona_${current.name.replace(/\s/g,"")}.json`;a.click();toast("JSONを書き出しました");
+  };
+  $("#clearBtn").onclick=()=>{
+    ["stance","skill","axis","fear","exp","info"].forEach(k=>state[k]=[]);
+    ["#cName","#cArea","#cStrength","#cUrl","#cPaste"].forEach(s=>$(s).value="");
+    ["#cInd","#cJob","#cSize"].forEach(s=>$(s).value="");
+    $("#urlStat").textContent="";
+    cands=[];current=null;currentCreative=null;emptyState();
+    syncAll();syncCounts();toast("入力をクリアしました");
+  };
+  $("#presetBtn").onclick=()=>{
+    Object.assign(state,{layer:"top",stance:["growth","zero","logic"],skill:["init","learn","honest"],
+      axis:["young","future","work"],fear:["big","fit"],exp:["intern","kenkyu"],info:["scout","ai","ob"],gender:"auto"});
+    $("#cName").value="サンプル株式会社";$("#cInd").value="製造・メーカー";$("#cJob").value="法人営業";
+    $("#cArea").value="大阪府";$("#cSize").value="51〜100名";
+    $("#cStrength").value="創業以来の主力製品で国内シェア上位。新規事業をゼロから立ち上げるフェーズにある。";
+    syncAll();syncCounts();toast("サンプル条件を入力しました");
+  };
+  $("#recheckBtn").onclick=async()=>{ await checkServer(); toast(srv.ok?"サーバーに接続しました":"サーバーに接続できません"); };
+  $("#themeBtn").onclick=()=>{
+    const d=document.documentElement.getAttribute("data-theme")==="dark";
+    document.documentElement.setAttribute("data-theme",d?"light":"dark");
+    $("#themeBtn").textContent=d?"ダーク":"ライト";
+  };
+}
+
+/* 企業サイトの読み取り：サーバーがあればサーバー側で取得（CORSを回避できる本来の経路） */
+const _readFromUrlLocal = readFromUrl, _readFromPasteLocal = readFromPaste;
+readFromUrl = async function(){
+  if(!(srv.ok && srv.hasOpenAI)) return _readFromUrlLocal();
+  const url=($("#cUrl").value||"").trim();
+  if(!/^https?:\/\//.test(url)){ $("#urlStat").innerHTML='<span style="color:var(--s2)">https:// から始まるURLを入力してください。</span>'; return; }
+  const btn=$("#readUrl"); btn.disabled=true; const old=btn.textContent; btn.textContent="読取中…";
+  $("#urlStat").textContent="サーバーがページを取得しています…";
+  try{
+    const r=await api("/api/analyze/company",{url,choices:{industries:IND,jobs:JOBS,sizes:SIZE}});
+    applyCompany(r, r._via||"サーバー取得");
+  }catch(e){ $("#urlStat").innerHTML=`<span style="color:var(--s2)">読み取りに失敗しました：${esc(e.message)}</span>`; }
+  finally{ btn.disabled=false; btn.textContent=old; }
+};
+readFromPaste = async function(){
+  const t=($("#cPaste").value||"").trim();
+  if(t.length<40){ $("#urlStat").innerHTML='<span style="color:var(--s2)">テキストが短すぎます。</span>'; return; }
+  if(!(srv.ok && srv.hasOpenAI)) return _readFromPasteLocal();
+  $("#urlStat").textContent="サーバーで解析しています…";
+  try{
+    const r=await api("/api/analyze/company",{text:t,choices:{industries:IND,jobs:JOBS,sizes:SIZE}});
+    applyCompany(r,"貼り付けテキスト（サーバー解析）");
+  }catch(e){ $("#urlStat").innerHTML=`<span style="color:var(--s2)">解析に失敗しました：${esc(e.message)}</span>`; }
+};
+init();
+</script>
+</body>
+</html>
