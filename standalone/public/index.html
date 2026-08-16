@@ -575,6 +575,7 @@ ol.qs li .why{font-size:12px;color:var(--ink-3);margin-top:3px}
           <button class="btn ghost sm" id="poolExport" type="button">この顔写真を埋め込んだHTMLを書き出す</button>
           <button class="btn ghost sm" id="poolClear" type="button">すべて削除</button>
         </div>
+        <div id="poolBulk" class="phbar noprint" style="margin-top:8px;padding:9px 11px;border:1px solid var(--hair);border-radius:10px;background:var(--surface-1)"></div>
         <p class="hint" style="margin:8px 0 0;font-size:12px">
           書き出したHTMLは、顔写真がファイル内に埋め込まれた状態になります。
           そのファイルを配れば、相手は<b>開くだけで顔写真つき</b>で使えます。
@@ -2175,9 +2176,19 @@ function loadPhotoPool(){
   photoPool = Array.isArray(PHOTOS_EMBEDDED) ? PHOTOS_EMBEDDED.slice() : [];
 }
 
+/* 保存用の形。表示用の正方形(dataUrl)はセルと切り出し位置から作り直せるので、
+   持ち歩かない。保存量が半分になり、あとから枠を直せる状態も保てる。 */
+function serializePool(){
+  return photoPool.map(p=>{
+    const o={...p};
+    if(o.cell) delete o.dataUrl;   // 古い形式（セルなし）は dataUrl を残す
+    return o;
+  });
+}
+
 function savePhotoPool(){
   try{
-    localStorage.setItem(PHOTO_STORE_KEY, JSON.stringify(photoPool));
+    localStorage.setItem(PHOTO_STORE_KEY, JSON.stringify(serializePool()));
     return true;
   }catch(e){
     /* 5MB前後で QuotaExceededError になる。作業自体は続けられるので、
@@ -2891,6 +2902,42 @@ const freeImg=img=>{ if(img&&img._url) URL.revokeObjectURL(img._url); };
 
 /* 正方形に切り出す。丸型アバターに切る前提なので 1:1 でないと頭頂と顎が欠ける。
    顔は中心よりやや上にあるので、上寄り（0.35）に取る。 */
+/* セルをそのまま（縦横比を保って）切り出す。後から枠を直すための元データ。 */
+function cellData(img,sx,sy,sw,sh,maxW){
+  const scale=Math.min(1, maxW/sw);
+  const c=document.createElement("canvas");
+  c.width=Math.round(sw*scale); c.height=Math.round(sh*scale);
+  const ctx=c.getContext("2d"); ctx.imageSmoothingQuality="high";
+  ctx.drawImage(img,sx,sy,sw,sh,0,0,c.width,c.height);
+  return c.toDataURL("image/jpeg",0.78);
+}
+
+/* セル画像から、表示用の正方形を作る。focus は上下位置(0=上寄り 1=下寄り)。 */
+function squareFromCell(cellUrl, focus, size){
+  return new Promise(res=>{
+    const im=new Image();
+    im.onload=()=>{
+      const w=im.naturalWidth,h=im.naturalHeight,side=Math.min(w,h);
+      const c=document.createElement("canvas"); c.width=c.height=size||448;
+      const ctx=c.getContext("2d"); ctx.imageSmoothingQuality="high";
+      ctx.drawImage(im,(w-side)/2,(h-side)*(focus==null?0.35:focus),side,side,0,0,c.width,c.height);
+      res(c.toDataURL("image/jpeg",0.85));
+    };
+    im.onerror=()=>res(null);
+    im.src=cellUrl;
+  });
+}
+
+/* セル画像を持つ写真の表示用正方形を作り直す。
+   保存するのはセルと縦位置だけなので、読み込み時とフレーム変更時にここを通す。 */
+async function hydratePool(){
+  await Promise.all(photoPool.map(async ph=>{
+    if(ph.cell && !ph.dataUrl){
+      ph.dataUrl = await squareFromCell(ph.cell, ph.focus, 448);
+    }
+  }));
+}
+
 function squareData(img,sx,sy,sw,sh,size,focus){
   const f=(focus==null?0.35:focus);
   const side=Math.min(sw,sh);
@@ -3159,13 +3206,78 @@ function shRenderPanels(){
   $$("#shPanels select").forEach(s=>s.onchange=()=>{shPanelSeg[+s.dataset.p]=s.value});
 }
 
-function addPhotos(items){
+async function addPhotos(items){
   let seq=photoPool.length;
   for(const it of items) photoPool.push({...it, id:`ph${++seq}_${Math.random().toString(36).slice(2,7)}`});
+  await hydratePool();                 // 表示用の正方形を先に作ってから描く
   const ok=savePhotoPool();
   renderPhotoAdmin();
   if(!ok) toast("枚数が多くブラウザに保存できませんでした。HTMLの書き出しをお使いください");
   return ok;
+}
+
+/* ---------- 一括編集 ----------
+   1枚ずつ直すのは、パネル1つ分（10枚）まとめて分類を付け替えたいときに辛い。
+   写真を選んでまとめて変えられるようにする。 */
+const poolSel = new Set();
+
+function renderBulkBar(){
+  const bar=$("#poolBulk"); if(!bar) return;
+  const n=poolSel.size;
+  bar.innerHTML=
+    `<b style="font-size:12px">${n?`${n}枚を選択中`:"まとめて直す"}</b>`
+    +`<button class="btn ghost sm" id="bulkAll" type="button">すべて選択</button>`
+    +`<button class="btn ghost sm" id="bulkNone" type="button">選択を解除</button>`
+    +(n?`<select id="bulkSeg" style="width:auto;padding:5px 8px;font-size:12px;border-radius:7px">
+          <option value="">分類を変更…</option>
+          ${SEGMENTS.map(x=>`<option value="${x.key}">${x.label}</option>`).join("")}
+        </select>
+        <select id="bulkGen" style="width:auto;padding:5px 8px;font-size:12px;border-radius:7px">
+          <option value="">性別を変更…</option>
+          <option value="male">男性</option><option value="female">女性</option>
+        </select>
+        <input id="bulkAge" type="number" min="15" max="70" placeholder="年齢" style="width:80px;padding:5px 8px;font-size:12px;border-radius:7px">
+        <button class="btn ghost sm" id="bulkAgeGo" type="button">年齢を適用</button>
+        <button class="btn ghost sm" id="bulkDel" type="button" style="color:var(--crit)">選択した${n}枚を削除</button>`
+       :`<span class="hint" style="font-size:12px">各写真の「選択」にチェックを入れると、分類・性別・年齢をまとめて変更できます。</span>`);
+
+  $("#bulkAll").onclick=()=>{ photoPool.forEach(p=>poolSel.add(p.id)); renderPhotoAdmin(); };
+  $("#bulkNone").onclick=()=>{ poolSel.clear(); renderPhotoAdmin(); };
+  if(!n) return;
+
+  const applyToSelected=fn=>{
+    photoPool.filter(p=>poolSel.has(p.id)).forEach(fn);
+    savePhotoPool(); renderPhotoAdmin(); refreshAssignedPhotos();
+  };
+  $("#bulkSeg").onchange=e=>{
+    if(!e.target.value) return;
+    const [o,c]=e.target.value.split(":");
+    applyToSelected(p=>{p.orientation=o;p.companySize=c});
+  };
+  $("#bulkGen").onchange=e=>{ if(e.target.value) applyToSelected(p=>p.gender=e.target.value); };
+  $("#bulkAgeGo").onclick=()=>{
+    const v=Number($("#bulkAge").value); if(!v) return;
+    applyToSelected(p=>p.age=v);
+  };
+  $("#bulkDel").onclick=()=>{
+    if(!confirm(`選択した ${n}枚を削除しますか？`)) return;
+    photoPool=photoPool.filter(p=>!poolSel.has(p.id));
+    poolSel.clear(); savePhotoPool(); renderPhotoAdmin(); refreshAssignedPhotos();
+  };
+}
+
+/* 既にペルソナへ配ってある写真を、編集後の内容に追随させる。
+   直したのに画面の顔が古いままだと、直った実感が得られない。 */
+function refreshAssignedPhotos(){
+  if(typeof cands==="undefined" || !cands.length) return;
+  let changed=false;
+  cands.forEach(c=>{
+    const id=c.imageInfo&&c.imageInfo.poolId; if(!id) return;
+    const ph=photoPool.find(x=>x.id===id);
+    if(!ph){ c.photo=null; c.imageInfo=null; changed=true; return; }
+    if(c.photo!==ph.dataUrl){ c.photo=ph.dataUrl; changed=true; }
+  });
+  if(changed){ renderDash(); if(cands[candIdx]) renderPersona(cands[candIdx]); }
 }
 
 /* ---------- 管理画面の描画 ---------- */
@@ -3194,10 +3306,19 @@ function renderPhotoAdmin(){
 
   const segOpts=p=>`<option value="">分類なし</option>`+SEGMENTS.map(s=>
     `<option value="${s.key}"${s.key===`${p.orientation||""}:${p.companySize||""}`?" selected":""}>${s.label}</option>`).join("");
+
   $("#poolGrid").innerHTML = photoPool.map(p=>`
-    <div class="card" data-id="${p.id}" style="padding:0;overflow:hidden">
-      <img src="${p.dataUrl}" alt="" style="display:block;width:100%;aspect-ratio:1;object-fit:cover">
+    <div class="card" data-id="${p.id}" style="padding:0;overflow:hidden;${poolSel.has(p.id)?"outline:2px solid var(--s1);outline-offset:-2px":""}">
+      <div style="position:relative">
+        <img src="${p.dataUrl||""}" alt="" style="display:block;width:100%;aspect-ratio:1;object-fit:cover;background:#eceae4">
+        <label style="position:absolute;top:5px;left:5px;background:rgba(255,255,255,.9);border-radius:5px;padding:1px 4px;font-size:10.5px;cursor:pointer">
+          <input type="checkbox" class="pk"${poolSel.has(p.id)?" checked":""} style="vertical-align:-1px"> 選択
+        </label>
+      </div>
       <div style="padding:7px 8px;display:flex;flex-direction:column;gap:5px">
+        ${p.cell?`<label style="font-size:10px;color:var(--ink-3)">切り出し位置
+          <input class="pf" type="range" min="0" max="100" step="5" value="${Math.round((p.focus==null?0.35:p.focus)*100)}" style="width:100%;margin-top:2px">
+        </label>`:`<span style="font-size:10px;color:var(--ink-3)">位置調整不可（古い形式）</span>`}
         <select class="ps" style="font-size:11px;padding:3px 5px;border-radius:6px">${segOpts(p)}</select>
         <select class="pg" style="font-size:11px;padding:3px 5px;border-radius:6px">
           <option value="unknown"${p.gender==="unknown"?" selected":""}>未設定</option>
@@ -3220,10 +3341,33 @@ function renderPhotoAdmin(){
     el.querySelector(".ps").onchange=save;
     el.querySelector(".pg").onchange=save;
     el.querySelector(".pa").onchange=save;
+
+    /* 切り出し位置の変更。動かしている間はその場の <img> だけ差し替え、
+       離したときに保存する。毎回描き直すと重くて操作感が悪い。 */
+    const fr=el.querySelector(".pf");
+    if(fr){
+      const img=el.querySelector("img");
+      const apply=async commit=>{
+        p.focus=Number(fr.value)/100;
+        const url=await squareFromCell(p.cell,p.focus,448);
+        if(url){ p.dataUrl=url; img.src=url; }
+        if(commit){ savePhotoPool(); refreshAssignedPhotos(); }
+      };
+      fr.oninput=()=>apply(false);
+      fr.onchange=()=>apply(true);
+    }
+
+    el.querySelector(".pk").onchange=e=>{
+      if(e.target.checked) poolSel.add(p.id); else poolSel.delete(p.id);
+      renderPhotoAdmin();
+    };
     el.querySelector(".pd").onclick=()=>{
-      photoPool=photoPool.filter(x=>x.id!==p.id); savePhotoPool(); renderPhotoAdmin();
+      photoPool=photoPool.filter(x=>x.id!==p.id); poolSel.delete(p.id);
+      savePhotoPool(); renderPhotoAdmin(); refreshAssignedPhotos();
     };
   });
+
+  renderBulkBar();
 
   const one=$("#oneSeg");
   if(one && !one.options.length){
@@ -3243,7 +3387,7 @@ function exportHtmlWithPhotos(){
   const START="/* EMBEDDED_PHOTOS_START */", END="/* EMBEDDED_PHOTOS_END */";
   const i=src.indexOf(START), j=src.indexOf(END);
   if(i<0||j<0){ toast("書き出しの目印が見つかりませんでした"); return; }
-  const out="<!doctype html>\n"+src.slice(0,i+START.length)+JSON.stringify(photoPool)+src.slice(j);
+  const out="<!doctype html>\n"+src.slice(0,i+START.length)+JSON.stringify(serializePool())+src.slice(j);
   const blob=new Blob([out],{type:"text/html"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
@@ -3346,7 +3490,7 @@ function initPhotoAdmin(){
   });
   window.addEventListener("resize",shDraw);
 
-  $("#shSlice").onclick=()=>{
+  $("#shSlice").onclick=async ()=>{
     if(!shImage) return;
     const cells=shCells(), age=shNum("shAge",22);
     const focus=Math.min(100,Math.max(0,shNum("shFocus",35)))/100;
@@ -3354,11 +3498,16 @@ function initPhotoAdmin(){
     const items=cells.map(c=>{
       const key=shPanelSeg[c.pi]||"";
       const [orientation,companySize]=key?key.split(":"):["",""];
-      return {dataUrl:squareData(shImage,c.x,c.y,c.w,c.h,448,focus),
+      /* 正方形に切ってしまうと後から枠を直せない。セル全体を残しておき、
+         表示用の正方形は縦位置(focus)から都度作る。 */
+      /* 400px あれば表示（最大222px）には十分。
+         実写は合成画像よりずっと重く、60枚だと localStorage の上限に近づくため。 */
+      return {cell:cellData(shImage,c.x,c.y,c.w,c.h,400), focus,
               gender:c.gender, age, orientation, companySize, tags:[]};
     });
-    addPhotos(items);
-    $("#shStat").textContent=`${items.length}枚を登録しました。下の一覧で、うまく切り出せていない写真は削除してください。`;
+    await addPhotos(items);
+    $("#shStat").textContent=`${items.length}枚を登録しました。`
+      +`下の「登録済みの顔写真」で、切り出し位置・分類・性別を1枚ずつ直せます。`;
   };
 
   $("#oneFile").onchange=async e=>{
@@ -3404,12 +3553,12 @@ function initPhotoAdmin(){
           return;
         }
 
-        items.push({dataUrl:squareData(img,0,0,img.naturalWidth,img.naturalHeight,448,
-                                       Math.min(100,Math.max(0,shNum("shFocus",35)))/100),
+        items.push({cell:cellData(img,0,0,img.naturalWidth,img.naturalHeight,400),
+                    focus:Math.min(100,Math.max(0,shNum("shFocus",35)))/100,
                     gender, age, orientation, companySize, tags:[]});
         freeImg(img);
       }
-      addPhotos(items);
+      await addPhotos(items);
       $("#oneStat").textContent=`${items.length}枚を登録しました。`;
     }catch(err){ $("#oneStat").textContent="取り込みに失敗しました："+err.message; }
     finally{ e.target.value=""; }
@@ -3430,6 +3579,8 @@ const PRISTINE_HTML = document.documentElement.outerHTML;
 loadPhotoPool();
 init();
 initPhotoAdmin();
+/* 保存しているのはセル画像と切り出し位置だけなので、表示用の正方形をここで作る。 */
+hydratePool().then(()=>{ if(navKey==="pho") renderPhotoAdmin(); renderServerBadge(); });
 </script>
 </body>
 </html>
