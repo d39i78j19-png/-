@@ -49,19 +49,33 @@
 **「JSONで書き出す」**で企業情報・ペルソナ定義・採点済み候補者・スカウトメールを1ファイルに
 まとめてダウンロードできます。**「JSONを読み込む」**で復元・共有できます。
 
-## ペルソナの顔写真を生成する
+## ペルソナの顔写真
 
-プロトタイプ画面（`standalone/public/index.html`）でペルソナの顔写真を実写品質で
-生成するためのサーバーが `standalone/` にあります。依存パッケージなしで動きます。
+プロトタイプ画面（`standalone/public/index.html`）にペルソナの顔写真を出すための
+サーバーが `standalone/` にあります。依存パッケージなしで動きます。
 
 ```bash
-export GEMINI_API_KEY="..."   # https://aistudio.google.com/apikey
 npm run portraits:serve       # http://localhost:8787 を開く
 ```
 
-キーが無い場合も画面は動作し、事前生成プールかプレースホルダが表示されます。
+顔写真の出し方は2通りあり、**APIキーなしで使える A を推奨**しています。
+
+**A. 写真を先に入れておく（APIキー不要・課金なし・即時）**
+`http://localhost:8787/photos.html` から顔写真を取り込みます。顔写真が格子状に
+並んだ1枚の画像（コンタクトシート）を、行数・列数を指定して1人ずつ切り出すこともできます。
+取り込んだ写真は、ペルソナの性別・年齢・表情に合わせて自動で割り当てられます。
+採用する顔を人の目で選び切れるので、品質が最も安定します。
+
+**B. 都度APIで生成する**
+
+```bash
+export GEMINI_API_KEY="..."   # または OPENAI_API_KEY
+npm run portraits:serve
+```
+
 課金前にプロンプトを確認するには `npm run portraits:dry-run`。
-プロンプト設計の考え方・費用・失敗時の直し方は [`standalone/README.md`](standalone/README.md) を参照してください。
+割り当ての仕組み・プロンプト設計・費用・失敗時の直し方は
+[`standalone/README.md`](standalone/README.md) を参照してください。
 
 ## 開発する人向け
 

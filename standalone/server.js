@@ -37,7 +37,8 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const { buildPortraitPrompt } = require("./lib/portrait-prompt");
+const { buildPortraitPrompt, expressionFor, ageBand } = require("./lib/portrait-prompt");
+const segments = require("./lib/segments");
 const imageProvider = require("./lib/image-provider");
 const store = require("./lib/photo-store");
 const text = require("./lib/persona-text");
@@ -55,15 +56,68 @@ const cacheKeyFor = (prompt) =>
   store.cacheKey(prompt, `${PROVIDER.name}:${PROVIDER.model}`, PROVIDER.size + PROVIDER.quality);
 
 /* ===================== 画像の解決 =====================
-   キャッシュ → API生成 → 事前生成プール → プレースホルダ の順に落とす。
-   どの段でも必ず「表示できる何か」を返す。壊れた画像アイコンは出さない。 */
+   PHOTO_SOURCE で経路を選ぶ。
 
-async function resolvePortrait(persona, index) {
+     pool（プールに写真があれば既定）… 事前に入れた写真から属性で選ぶ。
+       APIキー・課金・待ち時間ゼロ。採用する顔を人の目で選び切れるので、
+       プロトタイプや配布物ではこれがいちばん実用的。
+     api                            … 都度 Gemini / OpenAI で生成する。
+     auto                           … プールがあれば pool、無ければ api。
+
+   どの経路でも最後はプレースホルダに落ちる。壊れた画像アイコンは出さない。 */
+
+const PHOTO_SOURCE = (process.env.PHOTO_SOURCE || "auto").toLowerCase();
+
+/**
+ * 実際にどの経路で顔写真が出るかを返す。健康チェックの表示と実際の挙動が
+ * ズレないよう、退避も含めてここ1か所で決める。
+ */
+function photoSource() {
+  const hasPool = store.loadPool().length > 0;
+  if (PHOTO_SOURCE === "pool") return hasPool ? "pool" : canGenerate() ? "api" : "none";
+  if (PHOTO_SOURCE === "api") return canGenerate() ? "api" : hasPool ? "pool" : "none";
+  return hasPool ? "pool" : canGenerate() ? "api" : "none"; // auto
+}
+
+/**
+ * @param {Set<string>} [used]    同じセット内で同じ写真を配らないための使用済み集合
+ * @param {object} [context]      { conditions, company } セグメント判定に使う
+ */
+async function resolvePortrait(persona, index, used, context = {}) {
   const built = buildPortraitPrompt(persona, index, {
     wardrobe: WARDROBE,
     scene: SCENE,
     industry: persona._industry,
   });
+
+  // プール経路。セグメント（志向 × 志望企業規模）を主軸に、合う写真を選ぶ。
+  if (photoSource() === "pool") {
+    const segment = segments.segmentOf(persona, context);
+    const pooled = store.assignFromPool(persona, index, used || new Set(), {
+      orientation: segment.orientation,
+      companySize: segment.companySize,
+      expression: expressionFor(persona).key,
+      wardrobe: WARDROBE === "casual" ? "casual" : "recruit",
+      scene: SCENE,
+      ageBand: ageBand(persona.age),
+    });
+    if (pooled) {
+      const e = pooled.entry;
+      const segmentMatched = e.orientation === segment.orientation && e.companySize === segment.companySize;
+      return {
+        url: pooled.url, prompt: built.prompt, variable: built.variable,
+        provider: "pool", model: "", mock: false,
+        matched: e,
+        segment,
+        segmentMatched,
+        note: pooled.reused
+          ? "プールの枚数が足りず、同じ写真を再利用しました"
+          : !segmentMatched && (e.orientation || e.companySize)
+            ? `「${segment.label}」の写真が足りず、近いものを割り当てました`
+            : undefined,
+      };
+    }
+  }
 
   const key = cacheKeyFor(built.prompt);
   const cached = store.findCached(key);
@@ -80,7 +134,8 @@ async function resolvePortrait(persona, index) {
              provider: PROVIDER.name, model: PROVIDER.model, mock: false, cached: false };
   }
 
-  const pooled = store.fromPool(persona.gender, index);
+  // API経路を選んだがキーが無い場合、プールがあればそちらに退避する
+  const pooled = store.assignFromPool(persona, index, used || new Set());
   if (pooled) {
     return { url: pooled.url, prompt: built.prompt, variable: built.variable,
              provider: "pool", model: "", mock: true, note: NO_KEY_NOTE_POOL };
@@ -116,7 +171,8 @@ const routes = {
     const index = Number(body.index) || 0;
 
     // 画面側で組み立てたプロンプトが渡ってきた場合はそれを尊重する。
-    if (body.prompt) {
+    // ただしプール経路のときは生成しないので、そちらを先に見る。
+    if (body.prompt && photoSource() !== "pool") {
       const key = cacheKeyFor(body.prompt);
       const cached = store.findCached(key);
       if (cached) {
@@ -127,7 +183,7 @@ const routes = {
         const saved = store.saveCached(key, img.data, img.mimeType);
         return { url: saved.url, prompt: body.prompt, provider: PROVIDER.name, model: PROVIDER.model, mock: false };
       }
-      const pooled = store.fromPool(persona.gender, index);
+      const pooled = store.assignFromPool(persona, index);
       if (pooled) {
         return { url: pooled.url, prompt: body.prompt, provider: "pool", mock: true, note: NO_KEY_NOTE_POOL };
       }
@@ -135,7 +191,13 @@ const routes = {
                provider: "placeholder", mock: true, note: NO_KEY_NOTE };
     }
 
-    return resolvePortrait(persona, index);
+    /* 1人だけの差し替えでも、画面が既に配っている写真は避けたい。
+       exclude に表示中の他ペルソナのファイル名を渡してもらう。 */
+    const used = new Set(Array.isArray(body.exclude) ? body.exclude : []);
+    return resolvePortrait(persona, index, used, {
+      conditions: body.conditions,
+      company: body.company,
+    });
   },
 
   "POST /api/pipeline": async (body) => {
@@ -172,12 +234,14 @@ const routes = {
     }
 
     // 画像は1リクエスト1枚。人数分を順に呼ぶ。1人失敗しても他は返す。
+    // used はセット内で同じ顔を2人に配らないための共有集合。
     const results = [];
+    const used = new Set();
     for (let i = 0; i < personas.length; i++) {
       const persona = { ...personas[i], _industry: company.industry };
       let image;
       try {
-        image = await resolvePortrait(persona, i);
+        image = await resolvePortrait(persona, i, used, { conditions, company });
       } catch (e) {
         console.warn(`[pipeline] ${persona.name} の画像生成に失敗:`, e.message);
         image = {
@@ -192,12 +256,117 @@ const routes = {
     return {
       results,
       model: usedModel,
-      imageProvider: canGenerate()
-        ? PROVIDER.label
-        : results.some((r) => r.image.provider === "pool") ? "pool" : "placeholder",
-      mock: !text.hasTextKey() || !canGenerate(),
+      imageProvider: results.some((r) => r.image.provider === "pool")
+        ? `事前生成プール（${store.loadPool().length}枚）`
+        : canGenerate() ? PROVIDER.label : "placeholder",
+      mock: !text.hasTextKey() || results.some((r) => r.image.provider === "placeholder"),
       sourcePages,
     };
+  },
+
+  /* ---- プールの管理（photos.html から使う） ---- */
+
+  "POST /api/pool/list": async () => ({
+    photos: store.loadPool(),
+    source: photoSource(),
+    canGenerate: canGenerate(),
+    segments: segments.SEGMENTS,
+    coverage: poolCoverage(),
+  }),
+
+  /**
+   * 画像をプールに取り込む。連結画像（コンタクトシート）の切り出しは
+   * ブラウザの canvas 側で済ませ、ここには1枚ずつの data URL が届く。
+   * ファイル名はサーバー側で採番する。クライアントの申告は信用しない。
+   */
+  "POST /api/pool/import": async (body) => {
+    const items = Array.isArray(body.photos) ? body.photos : [];
+    if (!items.length) throw Object.assign(new Error("取り込む画像がありません"), { status: 400 });
+    if (items.length > 64) throw Object.assign(new Error("一度に取り込めるのは64枚までです"), { status: 400 });
+
+    store.ensureDirs();
+    const pool = store.loadPool();
+    const taken = new Set(pool.map((p) => p.file));
+    const photos = pool.map((p) => ({
+      file: p.file, gender: p.gender, age: p.age,
+      orientation: p.orientation, companySize: p.companySize, tags: p.tags, note: p.note,
+    }));
+    const added = [];
+
+    for (const item of items) {
+      const m = /^data:image\/(jpeg|jpg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(item.dataUrl || ""));
+      if (!m) throw Object.assign(new Error("画像は data URL（jpeg/png/webp）で渡してください"), { status: 400 });
+
+      const buf = Buffer.from(m[2], "base64");
+      if (buf.length > 6 * 1024 * 1024) {
+        throw Object.assign(new Error("1枚あたり6MBまでです"), { status: 400 });
+      }
+      const ext = m[1] === "png" ? "png" : m[1] === "webp" ? "webp" : "jpg";
+      const gender = ["male", "female"].includes(item.gender) ? item.gender : "unknown";
+      const orientation = segments.ORIENTATIONS.some((o) => o.key === item.orientation) ? item.orientation : "";
+      const companySize = segments.COMPANY_SIZES.some((s) => s.key === item.companySize) ? item.companySize : "";
+
+      /* ファイル名にセグメントを入れておくと、manifest.json を無くしても
+         どの分類の写真か人の目で分かる。 */
+      const prefix = [orientation, companySize, gender].filter(Boolean).join("-");
+      let seq = 1;
+      let name;
+      do {
+        name = `${prefix}-${String(seq).padStart(2, "0")}.${ext}`;
+        seq++;
+      } while (taken.has(name) || fs.existsSync(path.join(store.POOL_DIR, name)));
+
+      fs.writeFileSync(path.join(store.POOL_DIR, name), buf);
+      taken.add(name);
+      const entry = {
+        file: name,
+        gender,
+        age: Number(item.age) || 22,
+        orientation,
+        companySize,
+        tags: Array.isArray(item.tags) ? item.tags.filter((t) => typeof t === "string").slice(0, 8) : [],
+        note: typeof item.note === "string" ? item.note.slice(0, 120) : "",
+      };
+      photos.push(entry);
+      added.push(entry);
+    }
+
+    store.writeManifest(photos);
+    return { added: added.length, photos, source: photoSource() };
+  },
+
+  /** 写真1枚のタグ・性別・年齢を更新する。 */
+  "POST /api/pool/update": async (body) => {
+    const photos = store.loadPool().map((p) => ({
+      file: p.file, gender: p.gender, age: p.age,
+      orientation: p.orientation, companySize: p.companySize, tags: p.tags, note: p.note,
+    }));
+    const target = photos.find((p) => p.file === body.file);
+    if (!target) throw Object.assign(new Error("その写真はプールにありません"), { status: 404 });
+
+    if (["male", "female", "unknown"].includes(body.gender)) target.gender = body.gender;
+    if (Number(body.age)) target.age = Number(body.age);
+    if (Array.isArray(body.tags)) target.tags = body.tags.filter((t) => typeof t === "string").slice(0, 8);
+    store.writeManifest(photos);
+    return { photos };
+  },
+
+  /** 写真をプールから削除する。うまく写っていない顔を落とすため。 */
+  "POST /api/pool/remove": async (body) => {
+    // ファイル名はプールに実在するものだけを受け付ける（パス指定は通さない）
+    const pool = store.loadPool();
+    if (!pool.some((p) => p.file === body.file)) {
+      throw Object.assign(new Error("その写真はプールにありません"), { status: 404 });
+    }
+    fs.rmSync(path.join(store.POOL_DIR, body.file), { force: true });
+    const photos = pool
+      .filter((p) => p.file !== body.file)
+      .map((p) => ({
+        file: p.file, gender: p.gender, age: p.age,
+        orientation: p.orientation, companySize: p.companySize, tags: p.tags, note: p.note,
+      }));
+    store.writeManifest(photos);
+    return { photos, source: photoSource() };
   },
 
   "POST /api/analyze/requirements": (body) => text.analyzeRequirements(body),
@@ -205,25 +374,44 @@ const routes = {
   "POST /api/analyze/company": (body) => text.analyzeCompany(body),
 };
 
+/**
+ * セグメントごとの充足状況。どの分類の写真が足りないかを画面に出すため。
+ * 男女それぞれ最低1枚、5人のペルソナを出すなら3枚以上あると使い回しが起きにくい。
+ */
+function poolCoverage() {
+  const pool = store.loadPool();
+  return segments.SEGMENTS.map((seg) => {
+    const hit = pool.filter((p) => p.orientation === seg.orientation && p.companySize === seg.companySize);
+    return {
+      ...seg,
+      male: hit.filter((p) => p.gender === "male").length,
+      female: hit.filter((p) => p.gender === "female").length,
+      total: hit.length,
+    };
+  });
+}
+
 function healthPayload() {
-  const poolCount = fs.existsSync(store.POOL_DIR)
-    ? fs.readdirSync(store.POOL_DIR).filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f)).length
-    : 0;
+  const poolCount = store.loadPool().length;
+  const source = photoSource();
+  const usingPool = source === "pool" && poolCount > 0;
+
   return {
     // 画面側の変数名が hasOpenAI なので合わせている。実体は「テキストAIが使えるか」。
     hasOpenAI: text.hasTextKey(),
-    // 実写の顔写真を今この瞬間に生成できるか。画面のバッジはこれを見る。
-    canGeneratePhotos: canGenerate(),
+    // 実写の顔写真が今この瞬間に出せるか。プール経路でも true。画面のバッジはこれを見る。
+    canGeneratePhotos: usingPool || canGenerate(),
     // 旧名。画面の古い版が参照していたので互換のために残す。
-    hasGemini: canGenerate(),
-    imageProvider: canGenerate() ? PROVIDER.name : poolCount ? "pool" : "mock",
-    imageModel: canGenerate()
-      ? PROVIDER.model
-      : poolCount ? `事前生成プール ${poolCount}枚` : "プレースホルダ",
+    hasGemini: usingPool || canGenerate(),
+    photoSource: usingPool ? "pool" : canGenerate() ? "api" : "none",
+    imageProvider: usingPool ? "pool" : canGenerate() ? PROVIDER.name : "mock",
+    imageModel: usingPool
+      ? `事前生成プール ${poolCount}枚`
+      : canGenerate() ? PROVIDER.model : "プレースホルダ",
     textModel: text.hasTextKey() ? text.TEXT_MODEL : "ルールベース",
-    mock: !canGenerate(),
-    portraitSize: canGenerate() ? PROVIDER.size : "",
-    portraitQuality: PROVIDER.quality,
+    mock: !usingPool && !canGenerate(),
+    portraitSize: usingPool ? "" : canGenerate() ? PROVIDER.size : "",
+    portraitQuality: usingPool ? "" : PROVIDER.quality,
     wardrobe: WARDROBE,
     scene: SCENE,
     poolCount,
@@ -321,14 +509,24 @@ store.ensureDirs();
 server.listen(PORT, () => {
   const h = healthPayload();
   console.log(`\n  ペルソナ顔写真生成サーバー  http://localhost:${PORT}\n`);
-  console.log(`  画像 : ${canGenerate() ? `${PROVIDER.name}（${PROVIDER.label} / 1:1）` : h.imageModel}`);
-  console.log(`  本文 : ${h.textModel}`);
-  if (!canGenerate()) {
-    console.log(`\n  画像生成用のAPIキーが未設定です。実写の顔写真を出すには次のどちらかを設定してください:`);
-    console.log(`    export GEMINI_API_KEY="..."    # 推奨。人物ポートレートの写実性が安定して高い`);
+  if (h.photoSource === "pool") {
+    console.log(`  顔写真 : 事前生成プール ${h.poolCount}枚（APIキー不要・課金なし・即時）`);
+    console.log(`           ペルソナの性別・年齢・表情に合う写真を選んで割り当てます`);
+  } else if (h.photoSource === "api") {
+    console.log(`  顔写真 : ${PROVIDER.name}（${PROVIDER.label} / 1:1）— 都度生成`);
+  } else {
+    console.log(`  顔写真 : プレースホルダ`);
+  }
+  console.log(`  本文   : ${h.textModel}`);
+
+  if (h.photoSource === "none") {
+    console.log(`\n  実写の顔写真を出す方法は2通りあります。`);
+    console.log(`\n  【A】写真を先に用意する（推奨・APIキー不要）`);
+    console.log(`    http://localhost:${PORT}/photos.html を開いて写真を読み込む`);
+    console.log(`    または  node standalone/bin/import-photos.mjs <画像ファイル…>`);
+    console.log(`\n  【B】都度APIで生成する`);
+    console.log(`    export GEMINI_API_KEY="..."    # 人物ポートレートの写実性が安定して高い`);
     console.log(`    export OPENAI_API_KEY="..."    # gpt-image-1 で生成`);
-    console.log(`  事前にプールを焼いておく場合:`);
-    console.log(`    node standalone/bin/generate-pool.mjs --dry-run`);
   }
   console.log("");
 });

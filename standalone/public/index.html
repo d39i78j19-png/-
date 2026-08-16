@@ -2066,12 +2066,16 @@ function renderServerBadge(){
   /* 画面上でいちばん知りたいのは「今この瞬間、実写の顔写真が出るのか」なので、
      テキストAIの有無ではなく画像側の状態を主に出す。 */
   const canPhoto = srv.canGeneratePhotos ?? srv.hasGemini;
-  const photoLine = canPhoto
-    ? `<span style="color:var(--good)">実写生成が有効です（${esc(srv.imageProvider)}／${esc(srv.imageModel)}／${esc(srv.portraitSize||"")}）</span>`
+  const photoLine = srv.photoSource === "pool"
+    ? `<span style="color:var(--good)">事前生成プール ${srv.poolCount}枚 から、性別・年齢・表情の合う写真を割り当てます</span>
+       （<a href="/photos.html" style="color:var(--s1)">写真を追加・編集</a>／APIキー不要）`
+    : canPhoto
+    ? `<span style="color:var(--good)">実写生成が有効です（${esc(srv.imageProvider)}／${esc(srv.imageModel)}${srv.portraitSize?"／"+esc(srv.portraitSize):""}）</span>`
     : srv.poolCount
       ? `<span style="color:var(--s2)">画像APIキー未設定 — 事前生成プール ${srv.poolCount}枚 から割り当てます</span>`
-      : `<span style="color:var(--s2)">画像APIキー未設定 — プレースホルダを表示します。実写にするには
-         <code>GEMINI_API_KEY</code> か <code>OPENAI_API_KEY</code> を設定してサーバーを起動し直してください</span>`;
+      : `<span style="color:var(--s2)">プレースホルダを表示中 — 実写にするには
+         <a href="/photos.html" style="color:var(--s1)"><b>顔写真プール</b></a> に写真を入れる（APIキー不要・推奨）か、
+         <code>GEMINI_API_KEY</code> / <code>OPENAI_API_KEY</code> を設定してサーバーを起動し直してください</span>`;
 
   const line = !srv.ok
     ? `<span style="color:var(--ink-3)">○ サーバー未接続 — 顔写真は生成できません。
@@ -2183,8 +2187,11 @@ async function regenPhoto(){
     const r=await api("/api/persona/image",photoPayload(p,candIdx));
     p.photo=r.dataUrl||r.url||null; p.imageInfo=r; p.promptInfo={prompt:r.prompt};
     renderDash(); renderPersona(p);
-    aiStat(r.mock?`モック画像を表示しました（${r.note||"画像APIキー未設定"}）`:`顔写真を生成しました（${r.provider}）`,
-           r.mock?"var(--s2)":"var(--good)");
+    aiStat(r.mock ? `モック画像を表示しました（${r.note||"画像APIキー未設定"}）`
+                  : r.provider==="pool"
+                    ? `「${(r.segment&&r.segment.label)||""}」の顔写真を割り当てました${r.note?" — "+r.note:""}`
+                    : `顔写真を生成しました（${r.provider}）`,
+           r.mock||r.note ? "var(--s2)" : "var(--good)");
   }catch(e){ aiStat("画像生成に失敗しました："+e.message,"var(--s2)"); }
   finally{ if(btn){btn.disabled=false;btn.textContent="この人の顔写真を生成";} }
 }
@@ -2193,11 +2200,28 @@ async function regenPhoto(){
    AI生成ペルソナはサーバー側でプロンプトを組み直せるので persona をそのまま渡す。
    ローカル生成のペルソナは属性がサーバーの想定形と違うので、
    画面側で組んだプロンプトを送る。index は可変ブロックの振り分けに使われる。 */
-function photoPayload(p,i){
-  return p.ai
+function photoPayload(p,i,exclude){
+  const base = p.ai
     ? {persona:p.ai, index:i}
     : {prompt:buildPortraitPrompt(p,i).text, index:i,
-       persona:{id:"p"+String(i+1).padStart(2,"0"),name:p.name,gender:p.gender==="f"?"female":"male"}};
+       persona:{id:"p"+String(i+1).padStart(2,"0"),name:p.name,gender:p.gender==="f"?"female":"male",
+                age:parseInt(p.age,10)||21}};
+  /* 事前生成プールから配る場合、他のペルソナに既に配った写真を除外する。
+     渡さないと、属性が近い2人に同じ顔が付く。 */
+  base.exclude = exclude || assignedPoolFiles(i);
+  /* セグメント（志向 × 志望企業規模）の判定材料。
+     志向は選択条件から、志望企業規模は自社の従業員数から決まる。 */
+  const st = currentInput();
+  base.company = st.company;
+  base.conditions = conditionsPayload();
+  return base;
+}
+
+/* 表示中の他ペルソナに割り当て済みのプール写真ファイル名 */
+function assignedPoolFiles(exceptIdx){
+  return cands
+    .map((c,k)=>(k===exceptIdx?null:(c.imageInfo&&c.imageInfo.matched&&c.imageInfo.matched.file)))
+    .filter(Boolean);
 }
 
 /* ---------------- 全員分の顔写真をまとめて生成 ----------------
@@ -2206,21 +2230,29 @@ function photoPayload(p,i){
 async function regenAllPhotos(){
   if(!cands.length){ toast("先にペルソナを生成してください"); return; }
   const btn=$("#allImgBtn"); if(btn){btn.disabled=true;btn.textContent="生成中…";}
-  let ok=0; const failed=[];
+  let ok=0; const failed=[]; const taken=[]; let segLabel=""; let mismatched=0;
   for(let i=0;i<cands.length;i++){
     const p=cands[i];
-    setPhotoStat(`生成中… ${i+1}/${cands.length}（${p.name}）— 1枚あたり10〜20秒かかります`);
+    setPhotoStat(`${i+1}/${cands.length}（${p.name}）を処理しています…`);
     try{
-      const r=await api("/api/persona/image",photoPayload(p,i));
+      const r=await api("/api/persona/image",photoPayload(p,i,taken));
       p.photo=r.dataUrl||r.url||null; p.imageInfo=r; p.promptInfo={prompt:r.prompt};
+      if(r.matched&&r.matched.file) taken.push(r.matched.file); // 次の人に同じ顔を配らない
+      if(r.segment&&r.segment.label) segLabel=r.segment.label;
+      if(r.provider==="pool"&&!r.segmentMatched) mismatched++;
       ok++;
     }catch(e){ failed.push(p.name); console.warn("portrait failed",p.name,e); }
     renderDash(); if(i===candIdx) renderPersona(p);
   }
   if(btn){btn.disabled=false;btn.textContent="全員の顔写真を生成";}
-  setPhotoStat(failed.length
-    ? `${ok}件成功／${failed.length}件失敗（${failed.join("・")}）。失敗分はイラストのまま表示しています。`
-    : `${ok}件の顔写真を生成しました。`);
+  if(failed.length){
+    setPhotoStat(`${ok}件成功／${failed.length}件失敗（${failed.join("・")}）。失敗分はイラストのまま表示しています。`);
+  }else if(taken.length){
+    setPhotoStat(`${ok}件の顔写真を「${segLabel}」から割り当てました。`
+      +(mismatched?`（うち${mismatched}件は同セグメントの写真が足りず、近い分類で代用しています）`:""));
+  }else{
+    setPhotoStat(`${ok}件の顔写真を生成しました。`);
+  }
 }
 
 /* ---------------- 画像プロンプトの確認（機能2の出力） ---------------- */

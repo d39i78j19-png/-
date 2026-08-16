@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>顔写真プール — ペルソナスタジオ</title>
+<style>
+:root{
+  --page:#f9f9f7; --card:#fff; --ink-1:#141413; --ink-2:#3d3d3a; --ink-3:#73726c;
+  --hair:#e6e4dd; --s1:#3b6ea5; --good:#0ca30c; --warn:#c47b0a; --crit:#c0392b;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink-1);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  font-size:14px;line-height:1.7}
+header{background:#141413;color:#fff;padding:16px 24px}
+header h1{margin:0;font-size:17px;font-weight:700}
+header p{margin:4px 0 0;font-size:12px;color:#a8a79f}
+header a{color:#9fc0e8}
+main{max-width:1100px;margin:0 auto;padding:24px}
+.card{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:20px;margin-bottom:18px}
+h2{font-size:15px;margin:0 0 4px}
+.hint{color:var(--ink-3);font-size:12.5px;margin:0 0 14px}
+button{font:inherit;border-radius:8px;border:1px solid var(--hair);background:#fff;color:var(--ink-1);
+  padding:8px 14px;cursor:pointer}
+button:hover:not(:disabled){background:#f4f3ef}
+button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--ink-1);color:#fff;border-color:var(--ink-1)}
+button.danger{color:var(--crit);border-color:#e8cdc9}
+label.file{display:inline-block;padding:8px 14px;border:1px solid var(--hair);border-radius:8px;
+  background:#fff;cursor:pointer}
+label.file:hover{background:#f4f3ef}
+input[type=number],select,input[type=text]{font:inherit;padding:6px 9px;border:1px solid var(--hair);
+  border-radius:7px;background:#fff;color:var(--ink-1)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:12px;margin-top:14px}
+.cell{border:1px solid var(--hair);border-radius:10px;overflow:hidden;background:#fff}
+.cell img{display:block;width:100%;aspect-ratio:1;object-fit:cover;background:#eceae4}
+.cell .meta{padding:7px 8px;display:flex;flex-direction:column;gap:5px}
+.cell select,.cell input{width:100%;font-size:11.5px;padding:3px 5px}
+.cell .fn{font-size:10.5px;color:var(--ink-3);word-break:break-all}
+.badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700}
+.badge.on{background:rgba(12,163,12,.14);color:#0a7a0a}
+.badge.off{background:rgba(196,123,10,.15);color:#8a5606}
+.stat{font-size:12.5px;color:var(--ink-3);margin-top:10px}
+.sheetwrap{margin-top:14px;position:relative;display:inline-block;max-width:100%}
+.sheetwrap img{display:block;max-width:100%;border:1px solid var(--hair);border-radius:8px}
+.sheetwrap canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.steps{margin:0;padding-left:20px;font-size:12.5px;color:var(--ink-2)}
+.steps li{margin-bottom:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>顔写真プール</h1>
+  <p>ペルソナに割り当てる顔写真を、あらかじめここに入れておきます。APIキーも課金も不要です。
+     <a href="/">← アプリに戻る</a></p>
+</header>
+
+<main>
+  <div class="card">
+    <h2>現在の状態</h2>
+    <div id="status" class="stat">読み込み中…</div>
+    <div id="coverage"></div>
+  </div>
+
+  <div class="card">
+    <h2>1枚ずつ取り込む</h2>
+    <p class="hint">すでに正方形に切り出された顔写真がある場合はこちら。複数選択できます。</p>
+    <div class="row">
+      <label class="file">画像を選ぶ<input type="file" id="single" accept="image/*" multiple hidden></label>
+      <span>性別</span>
+      <select id="singleGender">
+        <option value="unknown">未設定</option>
+        <option value="male">男性</option>
+        <option value="female">女性</option>
+      </select>
+      <span>年齢</span><input type="number" id="singleAge" value="22" min="15" max="70" style="width:70px">
+      <span>セグメント</span><select id="singleSegment" style="min-width:210px"></select>
+    </div>
+    <div id="singleStat" class="stat"></div>
+  </div>
+
+  <div class="card">
+    <h2>セグメント別シートを分割して取り込む</h2>
+    <p class="hint">
+      「成長志向ー大手に行きたい顔」のようにセグメントごとのパネルが並び、各パネルが
+      〈見出し帯 → 男性の行 → ラベル帯 → 女性の行 → ラベル帯〉になっているシートを、
+      1人ずつ切り出して分類つきで取り込みます。切り出しはこのブラウザ内で完結し、
+      画像は外部に送信されません。
+    </p>
+    <ol class="steps">
+      <li>シート画像を選ぶ</li>
+      <li>パネルの列数・行数と、パネル内の構成を実際の並びに合わせる（<b>緑の枠が切り出し範囲</b>）</li>
+      <li>各パネルにセグメント（志向 × 志望企業規模）を割り当てる</li>
+      <li>「切り出してプールに追加」を押す</li>
+    </ol>
+    <div class="row" style="margin-top:12px">
+      <label class="file">シート画像を選ぶ<input type="file" id="sheet" accept="image/*" hidden></label>
+      <button id="presetBtn" type="button">6セグメント（3列×2行）の既定値</button>
+      <button id="sliceBtn" class="primary" disabled>切り出してプールに追加</button>
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <b style="font-size:12.5px">パネル</b>
+      <span>列</span><input type="number" id="pCols" value="3" min="1" max="6" style="width:60px">
+      <span>行</span><input type="number" id="pRows" value="2" min="1" max="6" style="width:60px">
+      <span>見出し帯の高さ(%)</span><input type="number" id="headPct" value="9" min="0" max="40" style="width:64px">
+    </div>
+    <div class="row" style="margin-top:8px">
+      <b style="font-size:12.5px">パネル内</b>
+      <span>写真の行数</span><input type="number" id="gRows" value="2" min="1" max="6" style="width:60px">
+      <span>1行の枚数</span><input type="number" id="gCols" value="5" min="1" max="10" style="width:60px">
+      <span>ラベル帯の高さ(%)</span><input type="number" id="labelPct" value="16" min="0" max="40" style="width:64px">
+      <span>内側の余白(%)</span><input type="number" id="inset" value="3" min="0" max="20" style="width:64px">
+    </div>
+    <div class="row" style="margin-top:8px">
+      <b style="font-size:12.5px">行ごとの性別</b>
+      <span id="rowGenders"></span>
+      <span style="margin-left:8px">年齢</span>
+      <input type="number" id="sheetAge" value="22" min="15" max="70" style="width:64px">
+    </div>
+
+    <div class="sheetwrap" id="sheetWrap" hidden>
+      <img id="sheetImg" alt="読み込んだシート画像">
+      <canvas id="sheetOverlay"></canvas>
+    </div>
+
+    <div id="panelSegments" class="row" style="margin-top:12px;display:none;flex-direction:column;align-items:stretch;gap:8px"></div>
+    <div id="sheetStat" class="stat"></div>
+  </div>
+
+  <div class="card">
+    <h2>プールの中身</h2>
+    <p class="hint">
+      性別・年齢・表情タグは、ペルソナに写真を割り当てるときの手がかりになります。
+      設定しておくほど「その人らしい顔」が付きます。うまく写っていない顔はここで削除してください。
+    </p>
+    <div id="pool" class="grid"></div>
+    <div id="poolStat" class="stat"></div>
+  </div>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const EXPRESSION_TAGS = [
+  ["", "表情タグなし"],
+  ["calm", "落ち着き（既定）"],
+  ["bright", "前向き・笑顔"],
+  ["gentle", "やわらかい・協調的"],
+  ["evaluating", "慎重・分析的"],
+  ["serious", "真剣・不愛想"],
+  ["hesitant", "自信なさげ・学習中"],
+  ["tired", "疲れ気味"],
+];
+
+async function api(path, payload) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  });
+  const json = await res.json().catch(() => ({ error: "応答を解釈できませんでした" }));
+  if (!res.ok) throw new Error(json.error || ("HTTP " + res.status));
+  return json;
+}
+
+/* ---------- 一覧の描画 ---------- */
+
+function renderStatus(d) {
+  const n = d.photos.length;
+  const src = d.source === "pool"
+    ? `<span class="badge on">プールの写真を使用中</span> ペルソナには、この ${n}枚 から`
+      + `<b>セグメント（志向 × 志望企業規模）</b>・性別・年齢・表情の合うものが割り当てられます。`
+    : d.canGenerate
+      ? `<span class="badge on">API生成を使用中</span> プールが空のため、都度APIで生成します。ここに写真を入れると、そちらが優先されます。`
+      : `<span class="badge off">プレースホルダ表示中</span> 写真を1枚でも入れると、実写が表示されるようになります。`;
+  $("#status").innerHTML = src;
+}
+
+function renderCoverage(coverage) {
+  const host = $("#coverage");
+  if (!coverage || !coverage.length) { host.innerHTML = ""; return; }
+  const cell = (n) => n === 0
+    ? `<b style="color:var(--crit)">0</b>`
+    : n < 3 ? `<b style="color:var(--warn)">${n}</b>` : `${n}`;
+  host.innerHTML = `
+    <table style="border-collapse:collapse;font-size:12.5px;margin-top:6px">
+      <tr style="text-align:left;color:var(--ink-3)">
+        <th style="padding:4px 12px 4px 0">セグメント</th>
+        <th style="padding:4px 12px 4px 0">男性</th><th style="padding:4px 12px 4px 0">女性</th>
+      </tr>
+      ${coverage.map((c) => `<tr>
+        <td style="padding:3px 12px 3px 0">${c.label}</td>
+        <td style="padding:3px 12px 3px 0">${cell(c.male)}</td>
+        <td style="padding:3px 12px 3px 0">${cell(c.female)}</td></tr>`).join("")}
+    </table>
+    <p class="hint" style="margin:8px 0 0">
+      1セグメントあたり男女それぞれ3枚以上あると、5人のペルソナを出しても顔の使い回しが起きません。
+      0 のセグメントは、近い分類の写真で代用されます。
+    </p>`;
+}
+
+function renderPool(photos) {
+  const host = $("#pool");
+  if (!photos.length) {
+    host.innerHTML = `<p class="hint" style="grid-column:1/-1;margin:0">まだ写真がありません。上のいずれかの方法で取り込んでください。</p>`;
+    $("#poolStat").textContent = "";
+    return;
+  }
+  const segOptions = (p) =>
+    `<option value="">分類なし</option>` +
+    SEGMENTS.map((s) => {
+      const cur = `${p.orientation || ""}:${p.companySize || ""}`;
+      return `<option value="${s.key}"${s.key === cur ? " selected" : ""}>${s.label}</option>`;
+    }).join("");
+
+  host.innerHTML = photos.map((p) => `
+    <div class="cell" data-file="${p.file}">
+      <img src="/personas/pool/${encodeURIComponent(p.file)}" alt="">
+      <div class="meta">
+        <select class="s">${segOptions(p)}</select>
+        <select class="g">
+          <option value="unknown"${p.gender === "unknown" ? " selected" : ""}>未設定</option>
+          <option value="male"${p.gender === "male" ? " selected" : ""}>男性</option>
+          <option value="female"${p.gender === "female" ? " selected" : ""}>女性</option>
+        </select>
+        <input class="a" type="number" min="15" max="70" value="${p.age || 22}">
+        <select class="t">
+          ${EXPRESSION_TAGS.map(([v, label]) =>
+            `<option value="${v}"${(p.tags || []).includes(v) ? " selected" : ""}>${label}</option>`).join("")}
+        </select>
+        <div class="fn">${p.file}</div>
+        <button class="danger del" style="padding:3px 6px;font-size:11px">削除</button>
+      </div>
+    </div>`).join("");
+
+  const m = photos.filter((p) => p.gender === "male").length;
+  const f = photos.filter((p) => p.gender === "female").length;
+  const u = photos.length - m - f;
+  const unseg = photos.filter((p) => !p.orientation || !p.companySize).length;
+  $("#poolStat").innerHTML = `計 ${photos.length}枚（男性 ${m} / 女性 ${f}${u ? ` / <b style="color:var(--warn)">性別未設定 ${u}</b>` : ""}`
+    + `${unseg ? ` / <b style="color:var(--warn)">セグメント未設定 ${unseg}</b>` : ""}）`;
+
+  host.querySelectorAll(".cell").forEach((cell) => {
+    const file = cell.dataset.file;
+    const save = () => {
+      const [orientation, companySize] = (cell.querySelector(".s").value || ":").split(":");
+      return api("/api/pool/update", {
+        file,
+        gender: cell.querySelector(".g").value,
+        age: Number(cell.querySelector(".a").value),
+        orientation, companySize,
+        tags: [cell.querySelector(".t").value].filter(Boolean),
+      }).then(() => refresh())
+        .catch((e) => alert("保存に失敗しました：" + e.message));
+    };
+
+    cell.querySelector(".s").onchange = save;
+    cell.querySelector(".g").onchange = save;
+    cell.querySelector(".a").onchange = save;
+    cell.querySelector(".t").onchange = save;
+    cell.querySelector(".del").onclick = async () => {
+      if (!confirm(`${file} を削除しますか？`)) return;
+      try {
+        await api("/api/pool/remove", { file });
+        await refresh();
+      } catch (e) { alert("削除に失敗しました：" + e.message); }
+    };
+  });
+}
+
+function renderSingleSegment() {
+  const sel = $("#singleSegment");
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">分類しない</option>`
+    + SEGMENTS.map((s) => `<option value="${s.key}">${s.label}</option>`).join("");
+  if (cur) sel.value = cur;
+}
+
+async function refresh() {
+  const d = await api("/api/pool/list");
+  SEGMENTS = d.segments || [];
+  renderSingleSegment();
+  renderStatus(d);
+  renderCoverage(d.coverage);
+  renderPool(d.photos);
+  if (sheetImage) renderPanelSegments();
+  return d;
+}
+
+/* ---------- 1枚ずつ取り込む ---------- */
+
+/* 正方形に整えてから送る。丸型アバターに切る前提なので 1:1 でないと頭頂と顎が欠ける。 */
+function toSquareDataUrl(img, sx, sy, sw, sh, size) {
+  const side = Math.min(sw, sh);
+  const cx = sx + (sw - side) / 2;
+  // 顔は中心よりやや上にあることが多いので、上寄りに切る
+  const cy = sy + (sh - side) * 0.35;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, cx, cy, side, side, 0, 0, size, size);
+  return c.toDataURL("image/jpeg", 0.92);
+}
+
+/* objectURL は呼び出し側が使い終わるまで revoke しない。
+   読み込み直後に revoke すると、そのあと img.src に付け替えたときに
+   ERR_FILE_NOT_FOUND になり、プレビューが表示されなくなる。 */
+function loadImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { img._objectUrl = url; resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("画像を読み込めませんでした")); };
+    img.src = url;
+  });
+}
+
+const releaseImage = (img) => { if (img && img._objectUrl) URL.revokeObjectURL(img._objectUrl); };
+
+$("#single").onchange = async (e) => {
+  const files = [...e.target.files];
+  if (!files.length) return;
+  $("#singleStat").textContent = `${files.length}枚を処理しています…`;
+  try {
+    const gender = $("#singleGender").value;
+    const age = Number($("#singleAge").value) || 22;
+    const [orientation, companySize] = ($("#singleSegment").value || ":").split(":");
+    const photos = [];
+    for (const f of files) {
+      const img = await loadImage(f);
+      photos.push({
+        dataUrl: toSquareDataUrl(img, 0, 0, img.naturalWidth, img.naturalHeight, 1024),
+        gender, age, orientation, companySize, tags: [], note: f.name,
+      });
+      releaseImage(img); // canvas に描き終わったので解放してよい
+    }
+    const r = await api("/api/pool/import", { photos });
+    $("#singleStat").textContent = `${r.added}枚を取り込みました。`;
+    await refresh();
+  } catch (err) {
+    $("#singleStat").textContent = "取り込みに失敗しました：" + err.message;
+  } finally {
+    e.target.value = "";
+  }
+};
+
+/* ---------- 連結画像を分割する ---------- */
+
+let sheetImage = null;
+let SEGMENTS = [];          // サーバーから受け取る6分類
+let panelSegment = [];      // パネル番号 → セグメントkey
+let rowGender = ["male", "female"];
+
+const num = (id, d) => Number($("#" + id).value) || d;
+
+/**
+ * シートの幾何を計算し、切り出す矩形の一覧を返す。
+ *
+ * パネル（セグメント）が pCols×pRows に並び、各パネルは
+ *   見出し帯 → [写真の行 → ラベル帯] × gRows
+ * という構成になっている前提。ラベル帯を差し引かないと、切り出した顔の下に
+ * 「①男性」の文字が写り込む。
+ */
+function computeCells() {
+  if (!sheetImage) return [];
+  const W = sheetImage.naturalWidth;
+  const H = sheetImage.naturalHeight;
+  const pCols = num("pCols", 1), pRows = num("pRows", 1);
+  const gCols = num("gCols", 1), gRows = num("gRows", 1);
+  const headPct = num("headPct", 0) / 100;
+  const labelPct = num("labelPct", 0) / 100;
+  const inset = Math.min(20, Math.max(0, num("inset", 0))) / 100;
+
+  const panelW = W / pCols;
+  const panelH = H / pRows;
+  const bodyH = panelH * (1 - headPct);      // 見出し帯を除いた高さ
+  const bandH = bodyH / gRows;               // 写真1行 + ラベル帯
+  const photoH = bandH * (1 - labelPct);     // ラベル帯を除いた写真の高さ
+  const cellW = panelW / gCols;
+
+  const cells = [];
+  for (let pr = 0; pr < pRows; pr++) {
+    for (let pc = 0; pc < pCols; pc++) {
+      const panelIdx = pr * pCols + pc;
+      const px = pc * panelW;
+      const py = pr * panelH + panelH * headPct;
+      for (let gr = 0; gr < gRows; gr++) {
+        for (let gc = 0; gc < gCols; gc++) {
+          const x = px + gc * cellW;
+          const y = py + gr * bandH;
+          const ix = cellW * inset;
+          const iy = photoH * inset;
+          cells.push({
+            panelIdx, gr, gc,
+            x: x + ix, y: y + iy, w: cellW - ix * 2, h: photoH - iy * 2,
+            gender: rowGender[gr] || "unknown",
+          });
+        }
+      }
+    }
+  }
+  return cells;
+}
+
+function drawOverlay() {
+  if (!sheetImage) return;
+  const img = $("#sheetImg");
+  const cv = $("#sheetOverlay");
+  if (!img.clientWidth) return;
+  cv.width = img.clientWidth;
+  cv.height = img.clientHeight;
+  const ctx = cv.getContext("2d");
+  ctx.clearRect(0, 0, cv.width, cv.height);
+
+  const sx = cv.width / sheetImage.naturalWidth;
+  const sy = cv.height / sheetImage.naturalHeight;
+
+  // 実際に切り出す正方形を描く。ここが顔に合っていれば結果も合う。
+  for (const c of computeCells()) {
+    const side = Math.min(c.w, c.h);
+    const cx = c.x + (c.w - side) / 2;
+    const cy = c.y + (c.h - side) * 0.35;
+    ctx.strokeStyle = c.gender === "female" ? "rgba(180,60,160,.9)" : "rgba(20,140,90,.9)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cx * sx, cy * sy, side * sx, side * sy);
+  }
+  // パネルの境界
+  const pCols = num("pCols", 1), pRows = num("pRows", 1);
+  ctx.strokeStyle = "rgba(192,57,43,.55)";
+  ctx.lineWidth = 1;
+  for (let c = 1; c < pCols; c++) {
+    const x = (cv.width / pCols) * c;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cv.height); ctx.stroke();
+  }
+  for (let r = 1; r < pRows; r++) {
+    const y = (cv.height / pRows) * r;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cv.width, y); ctx.stroke();
+  }
+}
+
+/* 行ごとの性別プルダウン */
+function renderRowGenders() {
+  const gRows = num("gRows", 1);
+  rowGender = Array.from({ length: gRows }, (_, i) => rowGender[i] || (i === 0 ? "male" : "female"));
+  $("#rowGenders").innerHTML = rowGender.map((g, i) =>
+    `<select data-row="${i}" style="margin-right:6px">
+       <option value="male"${g === "male" ? " selected" : ""}>${i + 1}行目：男性</option>
+       <option value="female"${g === "female" ? " selected" : ""}>${i + 1}行目：女性</option>
+       <option value="unknown"${g === "unknown" ? " selected" : ""}>${i + 1}行目：未設定</option>
+     </select>`).join("");
+  $("#rowGenders").querySelectorAll("select").forEach((s) => {
+    s.onchange = () => { rowGender[Number(s.dataset.row)] = s.value; drawOverlay(); };
+  });
+}
+
+/* パネルごとのセグメント割り当て。既定は SEGMENTS の並び順どおり。 */
+function renderPanelSegments() {
+  const n = num("pCols", 1) * num("pRows", 1);
+  panelSegment = Array.from({ length: n }, (_, i) => panelSegment[i] || (SEGMENTS[i] || {}).key || "");
+  const host = $("#panelSegments");
+  host.style.display = sheetImage ? "flex" : "none";
+  host.innerHTML =
+    `<b style="font-size:12.5px">各パネルのセグメント（シート上の並び順：左上から右へ）</b>` +
+    panelSegment.map((key, i) =>
+      `<div class="row" style="gap:8px">
+         <span style="font-size:12px;color:var(--ink-3);width:88px">パネル ${i + 1}</span>
+         <select data-panel="${i}" style="flex:1;max-width:340px">
+           <option value="">分類しない</option>
+           ${SEGMENTS.map((s) => `<option value="${s.key}"${s.key === key ? " selected" : ""}>${s.label}</option>`).join("")}
+         </select>
+       </div>`).join("");
+  host.querySelectorAll("select").forEach((s) => {
+    s.onchange = () => { panelSegment[Number(s.dataset.panel)] = s.value; };
+  });
+}
+
+$("#presetBtn").onclick = () => {
+  // アップロードされたシートの構成（3列×2行・各パネル 男性5＋女性5）
+  $("#pCols").value = 3; $("#pRows").value = 2;
+  $("#gRows").value = 2; $("#gCols").value = 5;
+  $("#headPct").value = 9; $("#labelPct").value = 16; $("#inset").value = 3;
+  rowGender = ["male", "female"];
+  renderRowGenders(); renderPanelSegments(); drawOverlay();
+};
+
+$("#sheet").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    releaseImage(sheetImage); // 前の1枚は不要
+    sheetImage = await loadImage(file);
+    $("#sheetImg").onload = drawOverlay;
+    $("#sheetImg").src = sheetImage._objectUrl;
+    $("#sheetWrap").hidden = false;
+    $("#sliceBtn").disabled = false;
+    renderRowGenders();
+    renderPanelSegments();
+    setTimeout(drawOverlay, 60);
+    $("#sheetStat").textContent =
+      `${sheetImage.naturalWidth}×${sheetImage.naturalHeight}px を読み込みました。`
+      + `緑（男性）／紫（女性）の枠が顔に合うまで、上の数値を調整してください。`;
+  } catch (err) {
+    $("#sheetStat").textContent = "読み込みに失敗しました：" + err.message;
+  }
+};
+
+["pCols", "pRows", "gRows", "gCols", "headPct", "labelPct", "inset"].forEach((id) => {
+  $("#" + id).oninput = () => {
+    if (id === "gRows") renderRowGenders();
+    if (id === "pCols" || id === "pRows") renderPanelSegments();
+    drawOverlay();
+  };
+});
+window.addEventListener("resize", drawOverlay);
+
+$("#sliceBtn").onclick = async () => {
+  if (!sheetImage) return;
+  const cells = computeCells();
+  const btn = $("#sliceBtn");
+  btn.disabled = true;
+  $("#sheetStat").textContent = `${cells.length}枚を切り出しています…`;
+
+  try {
+    const age = num("sheetAge", 22);
+    const photos = cells.map((c) => {
+      const segKey = panelSegment[c.panelIdx] || "";
+      const [orientation, companySize] = segKey ? segKey.split(":") : ["", ""];
+      const seg = SEGMENTS.find((s) => s.key === segKey);
+      return {
+        dataUrl: toSquareDataUrl(sheetImage, c.x, c.y, c.w, c.h, 1024),
+        gender: c.gender, age, orientation, companySize, tags: [],
+        note: seg ? `${seg.label} ${c.gc + 1}` : `panel${c.panelIdx + 1} r${c.gr + 1}c${c.gc + 1}`,
+      };
+    });
+
+    // 1リクエストが大きくなりすぎないよう分割して送る
+    let added = 0;
+    for (let i = 0; i < photos.length; i += 20) {
+      const res = await api("/api/pool/import", { photos: photos.slice(i, i + 20) });
+      added = res.added + i;
+      $("#sheetStat").textContent = `取り込み中… ${Math.min(i + 20, photos.length)}/${photos.length}`;
+    }
+    $("#sheetStat").textContent =
+      `${photos.length}枚を取り込みました。下の一覧で、意図しない切り出しになった写真は削除してください。`;
+    await refresh();
+  } catch (err) {
+    $("#sheetStat").textContent = "取り込みに失敗しました：" + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+refresh().catch((e) => { $("#status").textContent = "サーバーに接続できません：" + e.message; });
+</script>
+</body>
+</html>

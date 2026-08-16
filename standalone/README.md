@@ -8,7 +8,7 @@
 画面は最初から `http://localhost:8787` のサーバーを呼ぶ前提で書かれていました。
 
 ```
-ブラウザ → localhost:8787 → Gemini 画像生成API → 画像 → ブラウザ
+ブラウザ → localhost:8787 → 画像 → ブラウザ
 ```
 
 ところが **そのサーバーの実体がリポジトリに存在しませんでした**。
@@ -22,71 +22,209 @@
 
 このディレクトリが、その欠けていたサーバーです。
 
+## 顔写真の出し方は2通りあります
+
+| | A. 写真を先に入れる（プール） | B. 都度APIで生成する |
+|---|---|---|
+| APIキー | **不要** | 必要（Gemini または OpenAI） |
+| 費用 | **0円** | 1枚 $0.03〜$0.24 |
+| 待ち時間 | **即時** | 1枚10〜20秒 |
+| 品質の担保 | **採用する顔を目で選び切れる** | 毎回ガチャ。破綻した手や不自然な顔が混ざる |
+| オフライン配布（Electron） | **そのまま動く** | 利用者ごとにキーが要る |
+| ペルソナ数が多いとき | 顔が使い回しになる | 常に新しい顔が出る |
+
+**プロトタイプ・デモ・配布物では A を推奨します。** 「できるだけリアルな顔写真」に
+したい場合、いちばん確実なのは *生成のたびに運を天に任せる* ことではなく、
+*良い顔を一度選び切って固定する* ことです。B は「毎回違う顔が必要」「ペルソナが
+数十人規模」といった場合に向きます。
+
+両方入れておくこともできます。プールに写真があればそちらが優先され、
+無ければAPIに落ちます（`PHOTO_SOURCE=auto`、既定）。
+
 ## 起動
 
 ```bash
-export GEMINI_API_KEY="..."     # https://aistudio.google.com/apikey
 node standalone/server.js       # = npm run portraits:serve
 ```
 
-`http://localhost:8787` を開くと画面が出ます。APIキーはサーバーの環境変数からのみ
-読み込まれ、ブラウザには一切渡りません。
+`http://localhost:8787` を開くと画面が出ます。
+
+---
+
+# A. 写真を先に入れる（推奨・APIキー不要）
+
+## 画面から入れる
+
+`http://localhost:8787/photos.html` を開きます。
+
+- **1枚ずつ取り込む** — すでに正方形に切り出された顔写真がある場合
+- **セグメント別シートを分割して取り込む** — 顔写真が格子状に並んだ1枚の画像から、
+  分類つきで1人ずつ切り出します。切り出しはブラウザの canvas で完結し、画像は
+  外部に送信されません
+
+取り込んだら、一覧で各写真に **セグメント・性別・年齢・表情タグ** を設定してください。
+ここが割り当ての精度に直結します。うまく写っていない顔はその場で削除できます。
+
+### セグメント別シートの取り込み
+
+「成長志向ー大手に行きたい顔」のようにセグメントごとのパネルが並び、各パネルが
+〈見出し帯 → 男性5人 → ラベル帯 → 女性5人 → ラベル帯〉になっているシートに対応しています。
+
+1. シート画像を選ぶ
+2. **「6セグメント（3列×2行）の既定値」** を押す
+3. **緑（男性）／紫（女性）の枠が顔に合うまで**、見出し帯・ラベル帯の高さを微調整する
+4. 各パネルにセグメントを割り当てる（既定は左上から順に6分類）
+5. 「切り出してプールに追加」
+
+枠の位置は見出し帯とラベル帯の高さ(%)で決まります。ラベル帯を差し引かないと、
+切り出した顔の下に「①男性」の文字が写り込みます。
+
+## コマンドから入れる
+
+```bash
+# 個別ファイル（ファイル名に male / female / 男 / 女 が含まれれば自動判別）
+node standalone/bin/import-photos.mjs ~/faces/*.jpg
+
+# セグメント・性別・年齢・表情タグを明示する
+node standalone/bin/import-photos.mjs \
+  --orientation growth --size large --gender female --age 22 --tag bright ~/faces/f*.jpg
+#   --orientation  growth（成長志向）/ stability（安定志向）
+#   --size         large（大手）/ venture（ベンチャー）/ small（中小）
+
+# 取り込み済みの一覧
+node standalone/bin/import-photos.mjs --list
+```
+
+出力先は `public/personas/pool/`、メタデータは同ディレクトリの `manifest.json` です。
+manifest が無い場合はファイル名の接頭辞から推測して動きます。
+
+## 写真はどこから用意するか
+
+1. **一度だけAPIで焼く** — `bin/generate-pool.mjs`（下記 B）で12〜30枚作り、
+   良いものだけ残す。以降は課金なしで何度でも使えます
+2. **手持ちの素材を使う** — 商用利用可のライセンスを必ず確認してください
+3. **AI生成の顔写真配布サイト** — 同上
+
+いずれの場合も、**実在の人物として提示しないこと**（後述）。
+
+## どう割り当てられるか
+
+単に順番に配ると、20歳の学生に40代の顔が付いたり、慎重な人物に満面の笑みが
+付いたりします。`lib/photo-store.js` の `assignFromPool()` が属性で採点して選びます。
+
+| 観点 | 効き方 |
+|---|---|
+| **セグメント（志向 × 志望企業規模）** | **割り当ての主軸。一致で +120、不一致で -90** |
+| 性別 | 不一致は事実上除外（`unknown` は軽い減点にとどめる） |
+| 年齢 | 1歳離れるごとに減点 |
+| 表情タグ | ペルソナの性格・課題から推定した表情と一致すれば加点 |
+| 服装・背景タグ | `recruit` / `casual` / `student` / `office` が一致すれば加点 |
+| 使い回し | 同じセット内で既に配った写真は強く回避（枚数が足りなければ結局使う） |
+
+### セグメントはどう決まるか
+
+写真側は取り込み時に指定した分類、ペルソナ側は `lib/segments.js` が推定します。
+
+| 軸 | ペルソナ側の判定材料 |
+|---|---|
+| 志向（成長 / 安定） | STEP 1 の「志向性・価値観」チェック（`成長志向` / `安定志向` / `ゼロイチ・挑戦` / `WLB重視` など）。無ければ本文のキーワードから推定し、判別できなければ安定志向に寄せる |
+| 志望企業規模（大手 / ベンチャー / 中小） | 自社の従業員数。このツールのペルソナは「自社に来てほしい学生」なので、自社の規模がそのまま志望規模になる |
+
+従業員数バンドの対応:
+
+| 画面の選択 | セグメント |
+|---|---|
+| 〜50名 / 51〜100名 | ベンチャー |
+| 101〜300名 / 301〜1,000名 | 中小 |
+| 1,001名〜 | 大手 |
+
+該当セグメントの写真が足りない場合は近い分類で代用し、画面に
+「〜の写真が足りず、近いものを割り当てました」と表示します。
+
+表情タグは以下から選びます（`photos.html` のプルダウンと同じ）。
+
+`calm`（落ち着き・既定）／`bright`（前向き・笑顔）／`gentle`（やわらかい・協調的）／
+`evaluating`（慎重・分析的）／`serious`（真剣・不愛想）／`hesitant`（自信なさげ）／
+`tired`（疲れ気味）
+
+**枚数の目安**: 1セグメントあたり男女それぞれ3枚以上あると、5人のペルソナを出しても
+使い回しが起きません。6セグメント × 男女 × 5枚 = 60枚あれば十分です。
+`photos.html` の「現在の状態」に、セグメントごとの充足状況が表示されます。
+
+---
+
+# B. 都度APIで生成する
+
+```bash
+export GEMINI_API_KEY="..."     # https://aistudio.google.com/apikey
+# または
+export OPENAI_API_KEY="..."     # https://platform.openai.com/api-keys
+
+node standalone/server.js
+```
+
+両方あるときは Gemini が使われます（人物ポートレートの写実性が安定して高く、
+参照画像で同一人物を保てるため）。`PORTRAIT_PROVIDER=openai` で明示指定できます。
 
 STEP 1 でペルソナを作ってから、STEP 2 の
 
 - **この人の顔写真を生成** — 表示中の1人だけ
-- **全員の顔写真を生成** — 一覧の全員（1枚10〜20秒 × 人数）
+- **全員の顔写真を生成** — 一覧の全員
 - **AIでペルソナ＋画像を生成** — 本文と顔写真をまとめて
 - **画像プロンプトを確認** — 課金前にプロンプトを読む
 
 を押します。
 
-## APIキーが無いとき
+一度生成した写真はプロンプトのハッシュでキャッシュされるため、同じペルソナを
+何度表示しても課金は初回の1回だけです。
 
-キーが無くても画面は壊れません。次の順に落ちます。
+## プールを焼くために使う
 
-| 順 | 条件 | 返るもの |
-|---|---|---|
-| 1 | 同じプロンプトで生成済み | ディスクキャッシュの画像（無料・即時） |
-| 2 | `GEMINI_API_KEY` あり | Gemini で新規生成し、キャッシュに保存 |
-| 3 | `personas/pool/` に事前生成画像あり | プールから性別が合うものを割り当て |
-| 4 | いずれも無い | イニシャル入りのプレースホルダSVG |
-
-`<img>` の壊れアイコンが出ることはありません。
-
-キャッシュのキーは「モデル｜サイズ｜プロンプト」のハッシュです。同じペルソナを
-何度表示しても課金は初回の1回だけで、デモを回しても費用は増えません。
-
-## 事前に写真を焼いておく（プール）
-
-APIキーが無い環境でも顔写真つきで見せたい場合、先に焼いてコミットしておきます。
+APIで作った写真をプールに入れておけば、以降はキーなしで動きます。
 
 ```bash
 # 1. 課金前に必ずプロンプトと概算費用を確認する（APIを叩かない）
 node standalone/bin/generate-pool.mjs --dry-run
 
 # 2. まず1枚だけ試して作風を見る
-GEMINI_API_KEY=... node standalone/bin/generate-pool.mjs --only male-01
+node standalone/bin/generate-pool.mjs --only male-01
 
 # 3. 問題なければまとめて
-GEMINI_API_KEY=... node standalone/bin/generate-pool.mjs --count 12
+node standalone/bin/generate-pool.mjs --count 12
 ```
-
-出力先は `public/personas/pool/`。ファイル名は `male-01.jpg` `female-03.jpg` の形式で、
-サーバーは性別が合うものを順に割り当てます。
-
-主なオプション:
 
 | オプション | 説明 |
 |---|---|
 | `--count N` | 生成枚数（既定12・男女半々） |
 | `--only <id>` | 1件だけ生成。失敗した分の作り直しに使う |
 | `--personas <file>` | 自前のペルソナ定義JSONから生成 |
+| `--provider <p>` | `auto`（既定）/ `gemini` / `openai` |
 | `--wardrobe casual` | リクルートスーツではなく私服にする |
 | `--scene office` | 大学ではなくオフィス背景にする |
-| `--model` `--size` | 既定は `gemini-3-pro-image` / `2K` |
-| `--anchor <file>` | 同一人物の別カットを作るときの参照画像 |
+| `--model` `--size` `--quality` | モデルと解像度 |
+| `--anchor <file>` | 同一人物の別カットを作るときの参照画像（Gemini のみ） |
 | `--force` | 既存ファイルがあっても作り直す |
+
+生成後は `--dry-run` ではなく実物を必ず目視してください。API が返した＝使える、
+ではありません。破綻した手や不自然な顔は、プールに入れる前に落とします。
+
+## 費用
+
+画像モデルに無料枠はありません（課金アカウントが必要です）。
+
+| モデル | 1枚あたり（概算） |
+|---|---|
+| `gemini-3.1-flash-lite-image`（1K） | $0.0336 |
+| `gemini-3.1-flash-image`（1K / 2K） | $0.067 / $0.101 |
+| `gemini-3-pro-image`（1K・2K / 4K） | $0.134 / $0.24 |
+| `gpt-image-1`（low / medium / high） | $0.011 / $0.042 / $0.167 |
+| `dall-e-3`（standard / hd） | $0.04 / $0.08 |
+
+12枚焼いて $0.5〜$2 程度。単価は変動するので
+[Gemini](https://ai.google.dev/gemini-api/docs/models) /
+[OpenAI](https://openai.com/api/pricing/) の料金ページで確認してください。
+
+---
 
 ## リアルさを上げるために入れていること
 
@@ -108,15 +246,14 @@ GEMINI_API_KEY=... node standalone/bin/generate-pool.mjs --count 12
 | `1:1` で生成 | 丸型アバターに切る前提。他比率から丸く切ると頭頂と顎が欠ける |
 | `beautiful` `handsome` を**書かない** | モデル顔に寄り、個体差が消える |
 
-生成した画像は必ず目視で確認してください。API が返した＝使える、ではありません。
-
 | よくあるズレ | 直し方 |
 |---|---|
-| 指定より若く／老けて出る | `lib/portrait-prompt.js` の `AGE_LOOK` に皮膚・姿勢の記述を足す |
+| 指定より若く／老けて出る | `AGE_LOOK` に皮膚・姿勢の記述を足す |
 | 全員似た顔になる | `HAIR` `WARDROBE` `SETTINGS` の差を大きくする |
 | 文字やロゴが写り込む | 背景の指定を単純にする |
 | 手が崩れている | `PROPS` を `none` に寄せる |
 | 日本人に見えない | `East Asian features` を主語のさらに直前に移す |
+| OpenAI でモデレーション拒否 | `OPENAI_IMAGE_MODERATION=low` を設定する |
 
 問題があった人だけ `--only <id>` で作り直します。全体を作り直す必要はありません。
 
@@ -124,11 +261,17 @@ GEMINI_API_KEY=... node standalone/bin/generate-pool.mjs --count 12
 
 | 変数 | 既定 | 説明 |
 |---|---|---|
-| `GEMINI_API_KEY` | — | 画像生成に必須 |
+| `PHOTO_SOURCE` | `auto` | `pool`＝写真プールのみ / `api`＝都度生成のみ / `auto`＝プールがあれば優先 |
+| `GEMINI_API_KEY` | — | 都度生成（推奨プロバイダ） |
+| `OPENAI_API_KEY` | — | 都度生成（Gemini が無いとき自動で使う） |
 | `ANTHROPIC_API_KEY` | — | ペルソナ本文とAI診断。未設定ならルールベース |
-| `PORTRAIT_MODEL` | `gemini-3-pro-image` | 試行段階は `gemini-3.1-flash-image` が約半額 |
-| `PORTRAIT_SIZE` | `2K` | `512` / `1K` / `2K` / `4K` |
-| `PORTRAIT_WARDROBE` | `auto` | `auto`=リクルートスーツ / `casual`=私服 |
+| `PORTRAIT_PROVIDER` | `auto` | `gemini` / `openai` |
+| `PORTRAIT_MODEL` | `gemini-3-pro-image` | Gemini 側のモデル |
+| `PORTRAIT_SIZE` | `2K` | Gemini 側の解像度（`512`/`1K`/`2K`/`4K`） |
+| `OPENAI_IMAGE_MODEL` | `gpt-image-1` | OpenAI 側のモデル |
+| `OPENAI_IMAGE_QUALITY` | `high` | `low` / `medium` / `high` |
+| `OPENAI_IMAGE_MODERATION` | — | `low` で人物の誤検知を緩める |
+| `PORTRAIT_WARDROBE` | `auto` | `auto`＝リクルートスーツ / `casual`＝私服 |
 | `PORTRAIT_SCENE` | `student` | `student` / `office` |
 | `PORT` | `8787` | |
 
@@ -136,13 +279,12 @@ GEMINI_API_KEY=... node standalone/bin/generate-pool.mjs --count 12
 
 | メソッド | パス | 用途 |
 |---|---|---|
-| GET | `/api/health` | キーの有無・使用モデル・プール枚数 |
+| GET | `/api/health` | 経路・キーの有無・使用モデル・プール枚数 |
 | POST | `/api/persona/prompt` | プロンプトだけ返す（課金なし） |
-| POST | `/api/persona/image` | 顔写真1枚 |
+| POST | `/api/persona/image` | 顔写真1枚（プール割り当て or 生成） |
 | POST | `/api/pipeline` | ペルソナ本文 + 顔写真をまとめて |
-| POST | `/api/analyze/requirements` | 採用要件の診断 |
-| POST | `/api/analyze/scout` | スカウト文の添削 |
-| POST | `/api/analyze/company` | 採用ページの読み取り |
+| POST | `/api/pool/list` `/import` `/update` `/remove` | プールの管理（photos.html が使う） |
+| POST | `/api/analyze/requirements` `/scout` `/company` | 各種AI診断 |
 
 依存パッケージはありません。`node standalone/server.js` だけで起動します。
 
@@ -150,21 +292,9 @@ GEMINI_API_KEY=... node standalone/bin/generate-pool.mjs --count 12
 
 - 生成画像は**ペルソナ・デモ用**です。実在の内定者・社員・顧客であるかのように
   提示しないでください。
-- 社外に出す場合は「※画像はイメージです。実在の人物ではありません」の注記を入れてください
-  （画面のペルソナカードには既に入っています）。
+- 社外に出す場合は「※画像はイメージです。実在の人物ではありません」の注記を入れて
+  ください（画面のペルソナカードには既に入っています）。
 - Gemini の生成画像には SynthID の不可視ウォーターマークが入ります
   （無効化不可・画質への影響なし・商用利用の制限にはなりません）。
-
-## 費用
-
-画像モデルに無料枠はありません（課金アカウントが必要です）。
-
-| モデル | 1K | 2K | 4K |
-|---|---|---|---|
-| `gemini-3.1-flash-lite-image` | $0.0336 | — | — |
-| `gemini-3.1-flash-image` | $0.067 | $0.101 | $0.151 |
-| `gemini-3-pro-image` | $0.134 | $0.134 | $0.24 |
-
-12人分を pro / 2K で焼いて約 $1.6。キャッシュが効くので、以降の表示は無料です。
-モデルIDと料金は変動するため、
-[公式ドキュメント](https://ai.google.dev/gemini-api/docs/models)で最新を確認してください。
+- 手持ちの素材をプールに入れる場合は、**商用利用可のライセンスかどうかを必ず
+  確認してください**。実在の人物の写真を無断で使わないこと。

@@ -346,4 +346,23 @@ function buildPortraitPrompt(persona = {}, index = 0, opts = {}) {
   };
 }
 
-module.exports = { buildPortraitPrompt, EXPRESSIONS, SETTINGS, HAIR, WARDROBE };
+/** 年齢帯のタグ。事前生成プールの割り当てで、写真とペルソナを突き合わせるのに使う。 */
+function ageBand(age) {
+  const n = Number.parseInt(age, 10);
+  const a = Number.isFinite(n) ? n : 21;
+  if (a <= 23) return "youth";
+  if (a <= 29) return "young";
+  if (a <= 39) return "mid";
+  return "senior";
+}
+
+module.exports = {
+  buildPortraitPrompt,
+  expressionFor,
+  ageBand,
+  seedOf,
+  EXPRESSIONS,
+  SETTINGS,
+  HAIR,
+  WARDROBE,
+};
