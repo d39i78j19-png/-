@@ -2918,7 +2918,9 @@ function squareFromCell(cellUrl, focus, size){
     const im=new Image();
     im.onload=()=>{
       const w=im.naturalWidth,h=im.naturalHeight,side=Math.min(w,h);
-      const c=document.createElement("canvas"); c.width=c.height=size||448;
+      /* 元より大きく描かない。引き伸ばしても情報は増えず、ぼやけたまま容量だけ増える。 */
+      const out=Math.min(size||448, side);
+      const c=document.createElement("canvas"); c.width=c.height=out;
       const ctx=c.getContext("2d"); ctx.imageSmoothingQuality="high";
       ctx.drawImage(im,(w-side)/2,(h-side)*(focus==null?0.35:focus),side,side,0,0,c.width,c.height);
       res(c.toDataURL("image/jpeg",0.85));
@@ -3130,7 +3132,6 @@ function shDraw(){
   const ctx=cv.getContext("2d"); ctx.clearRect(0,0,cv.width,cv.height);
   const sx=cv.width/shImage.naturalWidth, sy=cv.height/shImage.naturalHeight;
   const focus=Math.min(100,Math.max(0,shNum("shFocus",35)))/100;
-  shPreviewLater();
   for(const c of shCells()){
     const side=Math.min(c.w,c.h);
     const x=(c.x+(c.w-side)/2)*sx, y=(c.y+(c.h-side)*focus)*sy;
@@ -3170,7 +3171,26 @@ function shPreview(){
       </figcaption></figure>`;
   }).join("");
 }
+/* 1人あたりの画素数が足りないと、何をしても表示時にぼやける。
+   原因が元データ側にあることが分かるよう、必要な大きさまで含めて出す。 */
+function shResolutionWarning(){
+  if(!shDetected||!shDetected.cells.length) return "";
+  const c=shDetected.cells[0];
+  const side=Math.round(Math.min(c.w,c.h));
+  if(side>=320) return "";
+  const need=Math.ceil(shImage.naturalWidth*(450/side)/100)*100;
+  return `<br><span style="color:var(--s2)">⚠ 1人あたり約 ${side}×${side}px しかありません。`
+    +`画面では 222px（高精細画面では444px相当）で表示するため、拡大されてぼやけます。<br>`
+    +`きれいに出すには、シートを <b>幅 ${need.toLocaleString()}px 以上</b> で書き出すか、`
+    +`<b>1人1枚（1024px程度）で作って「1枚ずつ取り込む」</b>をお使いください。</span>`;
+}
+
 function shPreviewLater(){ clearTimeout(shPreviewTimer); shPreviewTimer=setTimeout(shPreview,120); }
+
+/* プレビューと枠を両方更新する入口。
+   枠の描画は元画像が畳まれていると幅が取れず何もできないが、
+   プレビューはそれとは無関係に更新されなければならない。 */
+function shRefresh(){ shPreviewLater(); shDraw(); }
 
 function shRenderRows(){
   shRowGender=Array.from({length:shNum("shGRows",1)},(_,i)=>shRowGender[i]||(i===0?"male":"female"));
@@ -3203,7 +3223,7 @@ function shRenderPanels(){
         <option value="">分類しない</option>
         ${SEGMENTS.map(s=>`<option value="${s.key}"${s.key===k?" selected":""}>${s.label}</option>`).join("")}
       </select></div>`).join("");
-  $$("#shPanels select").forEach(s=>s.onchange=()=>{shPanelSeg[+s.dataset.p]=s.value});
+  $$("#shPanels select").forEach(s=>s.onchange=()=>{shPanelSeg[+s.dataset.p]=s.value; shPreviewLater();});
 }
 
 async function addPhotos(items){
@@ -3406,7 +3426,7 @@ function initPhotoAdmin(){
     shDetected=null;                          // 手動の既定値に戻す
     shRowGender=["male","female"];
     shPanelSeg=SHEET_PRESET_ORDER.slice();   // 並び順も既定に戻す
-    shRenderRows(); shRenderPanels(); shDraw();
+    shRenderRows(); shRenderPanels(); shRefresh();
   };
 
   $("#shFile").onchange=async e=>{
@@ -3456,7 +3476,8 @@ function initPhotoAdmin(){
           +`パネル ${shDetected.panelCols}列×${shDetected.panelRows}行、`
           +`各パネル ${shDetected.rowsPerPanel}行×${shDetected.colsPerRow}枚 `
           +`＝ 計 ${shDetected.cells.length}枚。<br>`
-          +`<b>下に出ている顔がそのまま登録されます。</b>問題なければ「この内容で登録する」を押してください。`;
+          +`<b>下に出ている顔がそのまま登録されます。</b>問題なければ「この内容で登録する」を押してください。`
+          +shResolutionWarning();
         $("#shManual").classList.remove("hidden");
       }else{
         $("#shManual").classList.add("hidden");
@@ -3464,7 +3485,7 @@ function initPhotoAdmin(){
           `${shImage.naturalWidth}×${shImage.naturalHeight}px を読み込みました。`
           +`自動検出できなかったため、枠が顔に合うまで数値を調整してください。`;
       }
-      shRenderRows(); shRenderPanels(); setTimeout(shDraw,60);
+      shRenderRows(); shRenderPanels(); setTimeout(shRefresh,60);
     }catch(err){ $("#shStat").textContent="読み込みに失敗しました："+err.message; }
   }
 
@@ -3473,7 +3494,7 @@ function initPhotoAdmin(){
     shDetected=null;
     $("#shManual").classList.add("hidden");
     $("#shStat").textContent="手動調整に切り替えました。見出し帯%・ラベル帯% で枠を合わせてください。";
-    shDraw();
+    shRefresh();
   };
 
   ["shPCols","shPRows","shGRows","shGCols","shHead","shLabel","shInset","shFocus"].forEach(id=>{
@@ -3485,10 +3506,11 @@ function initPhotoAdmin(){
       }
       if(id==="shGRows") shRenderRows();
       if(id==="shPCols"||id==="shPRows") shRenderPanels();
-      shDraw();
+      shRefresh();
     };
   });
   window.addEventListener("resize",shDraw);
+  $("#shRawBox").addEventListener("toggle",()=>setTimeout(shDraw,50));
 
   $("#shSlice").onclick=async ()=>{
     if(!shImage) return;
@@ -3500,9 +3522,9 @@ function initPhotoAdmin(){
       const [orientation,companySize]=key?key.split(":"):["",""];
       /* 正方形に切ってしまうと後から枠を直せない。セル全体を残しておき、
          表示用の正方形は縦位置(focus)から都度作る。 */
-      /* 400px あれば表示（最大222px）には十分。
-         実写は合成画像よりずっと重く、60枚だと localStorage の上限に近づくため。 */
-      return {cell:cellData(shImage,c.x,c.y,c.w,c.h,400), focus,
+      /* 上限は 560px。元セルがこれより小さければ cellData 側で等倍のまま残る
+         （引き伸ばさない）。表示は最大222pxなので、これだけあれば足りる。 */
+      return {cell:cellData(shImage,c.x,c.y,c.w,c.h,560), focus,
               gender:c.gender, age, orientation, companySize, tags:[]};
     });
     await addPhotos(items);
@@ -3539,7 +3561,7 @@ function initPhotoAdmin(){
           $("#shGCols").value=looksLikeSheet.colsPerRow;
           shRowGender=Array.from({length:looksLikeSheet.rowsPerPanel},(_,i)=>i===0?"male":"female");
           shPanelSeg=SHEET_PRESET_ORDER.slice();
-          shRenderRows(); shRenderPanels(); setTimeout(shDraw,60);
+          shRenderRows(); shRenderPanels(); setTimeout(shRefresh,60);
           $("#oneStat").innerHTML=
             `<b style="color:var(--s2)">これは1枚の顔写真ではなく、シート画像のようです。</b>`
             +`上の「セグメント別シートを取り込む」に移しました（${looksLikeSheet.cells.length}枚を検出）。<br>`
@@ -3553,7 +3575,9 @@ function initPhotoAdmin(){
           return;
         }
 
-        items.push({cell:cellData(img,0,0,img.naturalWidth,img.naturalHeight,400),
+        /* 1人1枚で渡される画像は元が大きいことが多い。
+           シート由来より枚数が少ないので、解像度を優先して残す。 */
+        items.push({cell:cellData(img,0,0,img.naturalWidth,img.naturalHeight,1024),
                     focus:Math.min(100,Math.max(0,shNum("shFocus",35)))/100,
                     gender, age, orientation, companySize, tags:[]});
         freeImg(img);
