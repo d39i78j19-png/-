@@ -975,7 +975,46 @@ if (typeof module !== "undefined" && module.exports) { module.exports = { portra
 const IND = ["製造・メーカー","商社・卸売","IT・ソフトウェア","建設・不動産","人材・HR","医療・福祉","小売・サービス","金融・保険","運輸・物流","広告・メディア"];
 const JOBS = ["法人営業","企画営業","総合職（営業）","エンジニア","施工管理","生産技術","販売・接客","事務・管理","コンサルタント","マーケティング"];
 const SIZE = ["〜50名","51〜100名","101〜300名","301〜1,000名","1,001名〜"];
-const GRAD = ["27卒（大学3年・修士1年）","28卒（大学2年・修士0年）","26卒（既卒・第二新卒含む）"];
+/* ===================== 対象年度（◯◯卒）=====================
+   固定で書くと毎年アプリを直すことになるので、今日の日付から出す。
+
+   新卒採用は卒業年 Y に対して
+     Y-2年の夏  … インターンが始まり、ここから本格化する
+     Y-1年3月   … 広報解禁
+     Y-1年6月   … 選考解禁
+     Y-1年10月  … 内定式
+   と動く。次の学年の動きが始まるのは Y-1年の夏なので、
+   6月を境に主対象を1つ進める。 */
+function gradYears(now){
+  const y=now.getFullYear(), m=now.getMonth()+1;
+  const main = m>=6 ? y+2 : y+1;   // いま主戦場になっている卒業年
+  const base = m>=4 ? y+1 : y;     // 「いま大学4年」の人の卒業年
+  const gradeOf = Y => 4-(Y-base);
+  const schoolLabel = g =>
+    g>=4 ? "大学4年・修士2年" : g===3 ? "大学3年・修士1年"
+    : g===2 ? "大学2年" : g===1 ? "大学1年" : "入学前";
+  const yy = Y => String(Y).slice(2);
+
+  const list=[`${yy(main-1)}卒（選考終盤・既卒含む）`];
+  for(let i=0;i<3;i++){ const Y=main+i; list.push(`${yy(Y)}卒（${schoolLabel(gradeOf(Y))}）`); }
+  return {list, base, main, mainIndex:1, gradeOf};
+}
+
+const GRAD_INFO = gradYears(new Date());
+const GRAD = GRAD_INFO.list;
+
+/* 「28卒（大学3年・修士1年）」から年齢の表示を出す。
+   固定の対応表にすると年度が変わったときに嘘になるので、学年から計算する。 */
+function gradAgeLabel(gradLabel){
+  const m=/^(\d{2})卒/.exec(String(gradLabel||""));
+  if(!m) return "21歳（大学3年）";
+  const g=GRAD_INFO.gradeOf(2000+Number(m[1]));
+  if(g>=4) return "22歳（大学4年）";
+  if(g===3) return "21歳（大学3年）";
+  if(g===2) return "20歳（大学2年）";
+  if(g===1) return "19歳（大学1年）";
+  return "23歳（既卒）";
+}
 
 const GROUPS = [
   { id:"layer", label:"採用ターゲット層", type:"radio", req:true,
@@ -1299,7 +1338,7 @@ function buildPersona(st,seed){
     seed, gender:g,
     name:nm[0]+" "+nm[1], kana:nm[2], univ,
     layer:st.layer, layerLabel:L.label, badge:L.badge,
-    age: st.grad.startsWith("28") ? "20歳（大学2年）" : st.grad.startsWith("27") ? "21歳（大学3年）" : "22歳（大学4年）",
+    age: gradAgeLabel(st.grad),
     grad: st.grad.split("（")[0],
     progress: L.prog,
     lead,
@@ -2828,6 +2867,8 @@ function emptyState(){
 }
 function init(){
   fill("#cInd",IND,"未選択");fill("#cJob",JOBS,"未選択");fill("#cSize",SIZE,"未選択");fill("#cGrad",GRAD);
+  /* 既定は「いま主戦場の卒業年」。一覧の先頭は選考終盤の年なので、そこではない。 */
+  $("#cGrad").selectedIndex = GRAD_INFO.mainIndex;
   renderNav();renderForm();renderSteps();emptyState();
   checkServer();
   ["#cName","#cArea","#cStrength"].forEach(s=>$(s).addEventListener("input",syncCounts));
