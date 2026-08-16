@@ -481,6 +481,94 @@ ol.qs li .why{font-size:12px;color:var(--ink-3);margin-top:3px}
     </main>
   </section>
 
+  <!-- ============ 顔写真プール ============
+       サーバーを立てずに、このHTMLだけで顔写真を取り込み・分類・割り当てするための画面。
+       画像はブラウザ内で切り出し、外部には一切送信しない。 -->
+  <section id="vPhotos" class="hidden">
+    <main class="wrap" style="padding:26px 20px 60px;max-width:1000px;margin:0">
+      <div class="sect-h"><h2>顔写真プール</h2>
+        <p>ペルソナに割り当てる顔写真をここに登録します。APIキーもサーバーも不要です。
+           画像はこのブラウザの中だけで処理され、外部には送信されません。</p></div>
+
+      <div class="card pad">
+        <div class="eyebrow">現在の状態</div>
+        <p id="poolState" style="font-size:13px;line-height:1.9;margin:6px 0 10px">読み込み中…</p>
+        <div id="poolCoverage"></div>
+      </div>
+
+      <div class="card pad" style="margin-top:18px">
+        <div class="sect-h" style="margin-bottom:10px"><h2 style="font-size:17px">セグメント別シートを取り込む</h2>
+          <p>「成長志向ー大手に行きたい顔」のようなパネルが格子状に並び、各パネルが
+             〈見出し帯 → 男性の行 → ラベル帯 → 女性の行 → ラベル帯〉になっているシート画像を、
+             1人ずつ切り出して分類つきで登録します。</p></div>
+        <div class="phbar noprint" style="margin-bottom:10px">
+          <label class="btn primary sm" for="shFile" style="cursor:pointer">シート画像を選ぶ</label>
+          <input type="file" id="shFile" accept="image/*" class="hidden">
+          <button class="btn ghost sm" id="shPreset" type="button">6セグメント（3列×2行）の既定値</button>
+          <button class="btn ghost sm" id="shSlice" type="button" disabled>切り出して登録</button>
+        </div>
+
+        <div id="shControls" class="hidden">
+          <div class="phbar noprint" style="gap:8px;align-items:center">
+            <b style="font-size:12px">パネル</b>
+            <label style="font-size:12px">列<input type="number" id="shPCols" value="3" min="1" max="6" style="width:56px;margin-left:4px"></label>
+            <label style="font-size:12px">行<input type="number" id="shPRows" value="2" min="1" max="6" style="width:56px;margin-left:4px"></label>
+            <label style="font-size:12px">見出し帯%<input type="number" id="shHead" value="9" min="0" max="40" style="width:60px;margin-left:4px"></label>
+            <b style="font-size:12px;margin-left:10px">パネル内</b>
+            <label style="font-size:12px">写真の行<input type="number" id="shGRows" value="2" min="1" max="6" style="width:56px;margin-left:4px"></label>
+            <label style="font-size:12px">1行の枚数<input type="number" id="shGCols" value="5" min="1" max="10" style="width:56px;margin-left:4px"></label>
+            <label style="font-size:12px">ラベル帯%<input type="number" id="shLabel" value="16" min="0" max="40" style="width:60px;margin-left:4px"></label>
+            <label style="font-size:12px">内側余白%<input type="number" id="shInset" value="3" min="0" max="20" style="width:60px;margin-left:4px"></label>
+            <label style="font-size:12px">年齢<input type="number" id="shAge" value="22" min="15" max="70" style="width:60px;margin-left:4px"></label>
+          </div>
+          <div class="phbar noprint" style="gap:8px;align-items:center">
+            <b style="font-size:12px">行ごとの性別</b><span id="shRowGenders"></span>
+          </div>
+          <p class="hint" style="margin:4px 0 8px;font-size:12px">
+            <b style="color:var(--good)">緑＝男性</b>／<b style="color:#a34a93">紫＝女性</b> の枠が、実際に切り出される範囲です。
+            顔がちょうど収まるまで上の数値を調整してください。
+          </p>
+          <div id="shWrap" style="position:relative;display:inline-block;max-width:100%">
+            <img id="shImg" alt="読み込んだシート画像" style="display:block;max-width:100%;border:1px solid var(--hair);border-radius:8px">
+            <canvas id="shOverlay" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas>
+          </div>
+          <div id="shPanels" style="margin-top:12px"></div>
+        </div>
+        <p class="hint" id="shStat" style="margin:10px 0 0"></p>
+      </div>
+
+      <div class="card pad" style="margin-top:18px">
+        <div class="sect-h" style="margin-bottom:10px"><h2 style="font-size:17px">1枚ずつ取り込む</h2>
+          <p>すでに正方形に切り出された顔写真がある場合はこちら。複数選択できます。</p></div>
+        <div class="phbar noprint">
+          <label class="btn ghost sm" for="oneFile" style="cursor:pointer">画像を選ぶ</label>
+          <input type="file" id="oneFile" accept="image/*" multiple class="hidden">
+          <select id="oneSeg" style="width:auto;padding:6px 9px;font-size:12.5px;border-radius:8px"></select>
+          <select id="oneGender" style="width:auto;padding:6px 9px;font-size:12.5px;border-radius:8px">
+            <option value="unknown">性別：未設定</option><option value="male">男性</option><option value="female">女性</option>
+          </select>
+          <input type="number" id="oneAge" value="22" min="15" max="70" style="width:70px;padding:6px 9px;font-size:12.5px;border-radius:8px">
+        </div>
+        <p class="hint" id="oneStat" style="margin:10px 0 0"></p>
+      </div>
+
+      <div class="card pad" style="margin-top:18px">
+        <div class="sect-h" style="margin-bottom:10px"><h2 style="font-size:17px">登録済みの顔写真</h2>
+          <p>セグメント・性別・年齢を設定するほど、ペルソナに合う顔が付きます。
+             うまく切り出せなかった写真はここで削除してください。</p></div>
+        <div class="phbar noprint">
+          <button class="btn ghost sm" id="poolExport" type="button">この顔写真を埋め込んだHTMLを書き出す</button>
+          <button class="btn ghost sm" id="poolClear" type="button">すべて削除</button>
+        </div>
+        <p class="hint" style="margin:8px 0 0;font-size:12px">
+          書き出したHTMLは、顔写真がファイル内に埋め込まれた状態になります。
+          そのファイルを配れば、相手は<b>開くだけで顔写真つき</b>で使えます。
+        </p>
+        <div id="poolGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:12px;margin-top:14px"></div>
+      </div>
+    </main>
+  </section>
+
   <!-- ============ 設定 ============ -->
   <section id="vSet" class="hidden">
     <main class="wrap" style="padding:26px 20px 60px;max-width:900px;margin:0">
@@ -1372,6 +1460,7 @@ const NAVS=[
   {k:"com", t:"コミュニ<br>ケーション", i:"com"},
   {k:"job", t:"求人票作成",           i:"job"},
   {k:"mail",t:"スカウト<br>メール",    i:"mail"},
+  {k:"pho", t:"顔写真<br>プール",      i:"set"},
   {k:"set", t:"設定",                i:"set"}
 ];
 let navKey="lib";
@@ -1381,6 +1470,7 @@ function renderNav(){
 function goNav(k){
   navKey=k; renderNav();
   if(k==="set"){ show("vSet"); return; }
+  if(k==="pho"){ show("vPhotos"); renderPhotoAdmin(); return; }
   if(k==="lib"){ mode="dash"; show("vDash"); syncMode(); return; }
   if(!current){ mode="dash"; show("vDash"); syncMode(); toast("先にペルソナを生成してください"); return; }
   mode="wiz"; show("vWiz"); syncMode();
@@ -1390,7 +1480,7 @@ function goNav(k){
     const el=$$("#creativeHost .out")[idx]; el&&el.scrollIntoView({behavior:"smooth",block:"start"});
   },80);
 }
-function show(id){["vDash","vWiz","vSet"].forEach(v=>$("#"+v).classList.toggle("hidden",v!==id))}
+function show(id){["vDash","vWiz","vSet","vPhotos"].forEach(v=>$("#"+v).classList.toggle("hidden",v!==id))}
 function syncMode(){$$("[data-mode]").forEach(b=>b.classList.toggle("on",b.dataset.mode===mode))}
 
 /* ================= フォーム ================= */
@@ -1482,7 +1572,7 @@ function renderPersona(p){
   $("#pcard").innerHTML=`
     <div class="photo">
       ${faceHTML(p,{w:222,h:222})}
-      <div class="cap">${p.photo?"※画像はイメージです。AI生成であり、実在の人物ではありません。":"イラスト表示中。「この人の顔写真を生成」を押すと実写になります。"}</div>
+      <div class="cap">${p.photo?"※画像はイメージです。AI生成であり、実在の人物ではありません。":(photoPool.length?"イラスト表示中。「この人の顔写真を生成」を押すと実写になります。":"イラスト表示中。左メニューの「顔写真プール」に顔写真を登録すると実写になります。")}</div>
     </div>
     <div class="pmain">
       <div class="pname">
@@ -2032,6 +2122,130 @@ function importPhotos(files){
    ブラウザ → Node(server.js) → OpenAI / 画像生成API → 画像 → ブラウザ
    APIキーはブラウザ側に一切持たない。
    ===================================================================== */
+/* =====================================================================
+   顔写真プール（サーバー不要）
+
+   このHTMLを file:// で直接開いても顔写真が使えるようにするための仕組み。
+   シート画像の切り出し・保存・ペルソナへの割り当てを、すべてブラウザ内で行う。
+   画像が外部に送信されることは一切ない。
+
+   保存先は2つ。
+     1. このファイルに埋め込まれた PHOTOS_EMBEDDED（書き出したHTMLに入る）
+     2. ブラウザの localStorage（作業中の一時保存）
+   埋め込みがあればそれを初期値にし、以降の編集は localStorage に載る。
+   ===================================================================== */
+
+/* 書き出し時にここが実データで置き換わる。目印の文字列は書き出し処理が探す。 */
+const PHOTOS_EMBEDDED = /* EMBEDDED_PHOTOS_START */[]/* EMBEDDED_PHOTOS_END */;
+
+const PHOTO_STORE_KEY = "personaStudio.photos.v1";
+
+const ORIENTATIONS = [{k:"growth",t:"成長志向"},{k:"stability",t:"安定志向"}];
+const COMPANY_SIZES = [{k:"large",t:"大手"},{k:"venture",t:"ベンチャー"},{k:"small",t:"中小"}];
+const SEGMENTS = ORIENTATIONS.flatMap(o=>COMPANY_SIZES.map(s=>({
+  key:`${o.k}:${s.k}`, orientation:o.k, companySize:s.k, label:`${o.t}ー${s.t}に行きたい顔`
+})));
+const segLabel = (o,c)=>{
+  const a=ORIENTATIONS.find(x=>x.k===o), b=COMPANY_SIZES.find(x=>x.k===c);
+  return a&&b ? `${a.t}ー${b.t}` : "";
+};
+
+let photoPool = [];
+
+function loadPhotoPool(){
+  try{
+    const raw = localStorage.getItem(PHOTO_STORE_KEY);
+    if(raw){ photoPool = JSON.parse(raw); return; }
+  }catch(e){ console.warn("localStorage を読めませんでした",e); }
+  photoPool = Array.isArray(PHOTOS_EMBEDDED) ? PHOTOS_EMBEDDED.slice() : [];
+}
+
+function savePhotoPool(){
+  try{
+    localStorage.setItem(PHOTO_STORE_KEY, JSON.stringify(photoPool));
+    return true;
+  }catch(e){
+    /* 5MB前後で QuotaExceededError になる。作業自体は続けられるので、
+       この場ではメモリ上に保持し、HTMLの書き出しを促す。 */
+    console.warn("localStorage に保存できませんでした",e);
+    return false;
+  }
+}
+
+/* ---------- ペルソナ → セグメントの判定 ----------
+   志向は STEP1 の「志向性・価値観」チェックが最優先。
+   志望企業規模は自社の従業員数から決まる（自社に来てほしい学生＝自社規模の志望者）。 */
+
+const GROWTH_WORDS = ["成長志向","挑戦","ゼロイチ","起業","グローバル","海外","裁量","リーダー","スピード"];
+const STABILITY_WORDS = ["安定志向","安定","WLB","ワークライフ","地元","長く働","腰を据え","堅実"];
+
+function inferOrientation(p){
+  const st = currentInput();
+  const stance = labelsOf("stance", st.stance).join(" ");
+  if(/成長志向|ゼロイチ|挑戦|グローバル/.test(stance)) return "growth";
+  if(/安定志向|WLB|地元/.test(stance)) return "stability";
+  const blob = [p&&p.lead, p&&p.name, ...(p&&p.hitWords||[]),
+                ...((p&&p.axes)||[]).map(a=>a.label||a)].filter(Boolean).join(" ");
+  const g = GROWTH_WORDS.filter(w=>blob.includes(w)).length;
+  const s = STABILITY_WORDS.filter(w=>blob.includes(w)).length;
+  if(g>s) return "growth";
+  if(s>g) return "stability";
+  return "stability"; // 新卒市場では「安定した会社」が選社理由の上位。迷ったらこちら。
+}
+
+const SIZE_BANDS = [
+  [/〜?\s*50名/, "venture"], [/51\s*〜\s*100名/, "venture"],
+  [/101\s*〜\s*300名/, "small"], [/301\s*〜\s*1,?000名/, "small"],
+  [/1,?001名\s*〜/, "large"]
+];
+function inferCompanySize(){
+  const v = ($("#cSize") && $("#cSize").value) || "";
+  if(/大手|大企業|上場/.test(v)) return "large";
+  if(/ベンチャー|スタートアップ/.test(v)) return "venture";
+  if(/中小|中堅/.test(v)) return "small";
+  for(const [re,k] of SIZE_BANDS) if(re.test(v)) return k;
+  return "small";
+}
+
+function segmentOfPersona(p){
+  const orientation = inferOrientation(p);
+  const companySize = inferCompanySize();
+  return {orientation, companySize, label: segLabel(orientation, companySize)};
+}
+
+/* ---------- 割り当て ----------
+   単に順番に配ると、慎重な人物に満面の笑みが付いたり、
+   属性の近い2人に同じ顔が付いたりする。属性で採点して選ぶ。 */
+function assignPhoto(p, index, used){
+  if(!photoPool.length) return null;
+  const seg = segmentOfPersona(p);
+  const wantGender = p.gender==="f" ? "female" : "male";
+  const wantAge = parseInt(p.age,10) || 21;
+  const expr = (typeof expressionFor==="function" && p.st) ? expressionFor(p).k : "";
+
+  let best=null, bestScore=-Infinity;
+  for(const ph of photoPool){
+    let sc=0;
+    if(ph.gender==="unknown") sc-=50;
+    else if(ph.gender!==wantGender) sc-=1000;
+    // セグメント一致が主軸。未分類は「合わない」ではなく「情報がない」ので減点しない。
+    if(ph.orientation) sc += ph.orientation===seg.orientation ? 120 : -90;
+    if(ph.companySize) sc += ph.companySize===seg.companySize ? 120 : -90;
+    sc -= Math.abs((ph.age||22) - wantAge) * 3;
+    if(expr && (ph.tags||[]).includes(expr)) sc += 30;
+    if(used && used.has(ph.id)) sc -= 500;
+    sc += ((index*7 + (ph.id||"").length) % 5) * 0.5;
+    if(sc>bestScore){ bestScore=sc; best=ph; }
+  }
+  if(!best) return null;
+  if(used) used.add(best.id);
+  return {
+    photo: best, segment: seg,
+    segmentMatched: best.orientation===seg.orientation && best.companySize===seg.companySize,
+    reused: bestScore <= -500
+  };
+}
+
 const API_BASE = /^https?:$/.test(location.protocol) ? "" : "http://localhost:8787";
 const srv = { ok:false, hasOpenAI:false, hasGemini:false, imageProvider:"", imageModel:"", textModel:"", mock:true };
 
@@ -2077,9 +2291,19 @@ function renderServerBadge(){
          <a href="/photos.html" style="color:var(--s1)"><b>顔写真プール</b></a> に写真を入れる（APIキー不要・推奨）か、
          <code>GEMINI_API_KEY</code> / <code>OPENAI_API_KEY</code> を設定してサーバーを起動し直してください</span>`;
 
+  /* このHTML単体（file://）で使う場合、サーバー未接続は異常ではない。
+     顔写真プールに写真が入っていれば実写は出るので、その旨を主に出す。 */
   const line = !srv.ok
-    ? `<span style="color:var(--ink-3)">○ サーバー未接続 — 顔写真は生成できません。
-       <code>node standalone/server.js</code> を起動し <b>http://localhost:8787</b> を開いてください。</span>`
+    ? (photoPool.length
+        ? `<span style="color:var(--good);font-weight:700">● 単体モードで動作中</span>
+           <span style="color:var(--ink-3)">顔写真：登録済みの <b>${photoPool.length}枚</b> から、
+           セグメント・性別・年齢の合うものを自動で割り当てます（サーバー・APIキー不要）。<br>
+           ペルソナ本文：この画面内のルールベース生成。<br>
+           AIによる文章生成や画像生成APIを使う場合のみ、Node.js のサーバーが必要です。</span>`
+        : `<span style="color:var(--s2);font-weight:700">● 単体モードで動作中</span>
+           <span style="color:var(--ink-3)">顔写真がまだ登録されていないため、イラストで表示しています。<br>
+           左メニューの <b>「顔写真プール」</b> から顔写真を登録すると、実写に切り替わります
+           （サーバー・APIキー不要）。</span>`)
     : `<span style="color:${canPhoto?"var(--good)":"var(--s2)"};font-weight:700">● 接続済み</span>
        <span style="color:var(--ink-3)">顔写真：${photoLine}<br>
        ペルソナ本文：${esc(srv.textModel)}${srv.hasOpenAI?"":"（ANTHROPIC_API_KEY 未設定のためルールベース）"}<br>
@@ -2089,8 +2313,11 @@ function renderServerBadge(){
   $$("[data-needkey]").forEach(b=>{ b.disabled=!(srv.ok&&srv.hasOpenAI); });
   const chip=$("#srvChip");
   if(chip){
-    chip.textContent = !srv.ok ? "サーバー未接続" : canPhoto ? "実写生成 有効" : srv.poolCount ? "プール画像" : "画像キー未設定";
-    chip.style.background = !srv.ok ? "rgba(255,255,255,.12)" : canPhoto ? "rgba(12,163,12,.35)" : "rgba(250,178,25,.35)";
+    const localOk = !srv.ok && photoPool.length > 0;
+    chip.textContent = localOk ? `顔写真 ${photoPool.length}枚`
+      : !srv.ok ? "顔写真 未登録"
+      : canPhoto ? "実写生成 有効" : srv.poolCount ? "プール画像" : "画像キー未設定";
+    chip.style.background = (localOk || (srv.ok && canPhoto)) ? "rgba(12,163,12,.35)" : "rgba(250,178,25,.35)";
   }
 }
 
@@ -2179,20 +2406,45 @@ function adaptServerPersona(x,i,st){
 }
 
 /* ---------------- 個別に画像だけ再生成 ---------------- */
+/* 登録済みの顔写真プールから1人分を割り当てる。サーバーもAPIキーも使わない。
+   戻り値が false なら、プールが空＝この経路は使えない。 */
+function applyPoolPhoto(p, index, used){
+  const hit = assignPhoto(p, index, used);
+  if(!hit) return false;
+  p.photo = hit.photo.dataUrl;
+  p.imageInfo = {provider:"pool", poolId:hit.photo.id, segment:hit.segment,
+                 segmentMatched:hit.segmentMatched, reused:hit.reused};
+  return true;
+}
+
 async function regenPhoto(){
   const p=cands[candIdx]; if(!p) return;
-  const btn=$("#imgBtn"); if(btn){btn.disabled=true;btn.textContent="生成中…";}
-  aiStat(`${p.name} の画像を生成しています…`);
+  const btn=$("#imgBtn"); if(btn){btn.disabled=true;btn.textContent="処理中…";}
   try{
+    /* 登録済みの写真があれば、それを最優先で使う（サーバー不要・即時）。 */
+    if(photoPool.length){
+      const used=new Set(cands.map((c,k)=>k===candIdx?null:(c.imageInfo&&c.imageInfo.poolId)).filter(Boolean));
+      if(applyPoolPhoto(p,candIdx,used)){
+        renderDash(); renderPersona(p);
+        const i=p.imageInfo;
+        aiStat(`「${i.segment.label}」の顔写真を割り当てました`
+          +(i.segmentMatched?"":"（該当分類の写真が足りず、近いもので代用しています）"),
+          i.segmentMatched?"var(--good)":"var(--s2)");
+        return;
+      }
+    }
+    if(!srv.ok){
+      aiStat("顔写真がまだ登録されていません。左メニューの「顔写真プール」から登録してください。","var(--s2)");
+      goNav("pho"); return;
+    }
+    aiStat(`${p.name} の画像を生成しています…`);
     const r=await api("/api/persona/image",photoPayload(p,candIdx));
     p.photo=r.dataUrl||r.url||null; p.imageInfo=r; p.promptInfo={prompt:r.prompt};
     renderDash(); renderPersona(p);
     aiStat(r.mock ? `モック画像を表示しました（${r.note||"画像APIキー未設定"}）`
-                  : r.provider==="pool"
-                    ? `「${(r.segment&&r.segment.label)||""}」の顔写真を割り当てました${r.note?" — "+r.note:""}`
-                    : `顔写真を生成しました（${r.provider}）`,
-           r.mock||r.note ? "var(--s2)" : "var(--good)");
-  }catch(e){ aiStat("画像生成に失敗しました："+e.message,"var(--s2)"); }
+                  : `顔写真を生成しました（${r.provider}）`,
+           r.mock ? "var(--s2)" : "var(--good)");
+  }catch(e){ aiStat("画像の割り当てに失敗しました："+e.message,"var(--s2)"); }
   finally{ if(btn){btn.disabled=false;btn.textContent="この人の顔写真を生成";} }
 }
 
@@ -2229,30 +2481,44 @@ function assignedPoolFiles(exceptIdx){
    失敗した分はイラストのまま残して最後に件数を出す。 */
 async function regenAllPhotos(){
   if(!cands.length){ toast("先にペルソナを生成してください"); return; }
+
+  /* 登録済みの写真があれば、それを最優先で使う（サーバー不要・即時・課金なし）。 */
+  if(photoPool.length){
+    const used=new Set(); let mismatched=0; let label="";
+    cands.forEach((p,i)=>{
+      if(applyPoolPhoto(p,i,used)){
+        label=p.imageInfo.segment.label;
+        if(!p.imageInfo.segmentMatched) mismatched++;
+      }
+    });
+    renderDash(); renderPersona(cands[candIdx]);
+    setPhotoStat(`${cands.length}件の顔写真を「${label}」から割り当てました。`
+      +(mismatched?`（うち${mismatched}件は同セグメントの写真が足りず、近い分類で代用しています）`:""));
+    return;
+  }
+
+  if(!srv.ok){
+    setPhotoStat("顔写真がまだ登録されていません。左メニューの「顔写真プール」から登録してください。");
+    goNav("pho"); return;
+  }
+
   const btn=$("#allImgBtn"); if(btn){btn.disabled=true;btn.textContent="生成中…";}
-  let ok=0; const failed=[]; const taken=[]; let segLabel=""; let mismatched=0;
+  let ok=0; const failed=[]; const taken=[];
   for(let i=0;i<cands.length;i++){
     const p=cands[i];
-    setPhotoStat(`${i+1}/${cands.length}（${p.name}）を処理しています…`);
+    setPhotoStat(`${i+1}/${cands.length}（${p.name}）を生成しています…`);
     try{
       const r=await api("/api/persona/image",photoPayload(p,i,taken));
       p.photo=r.dataUrl||r.url||null; p.imageInfo=r; p.promptInfo={prompt:r.prompt};
-      if(r.matched&&r.matched.file) taken.push(r.matched.file); // 次の人に同じ顔を配らない
-      if(r.segment&&r.segment.label) segLabel=r.segment.label;
-      if(r.provider==="pool"&&!r.segmentMatched) mismatched++;
+      if(r.matched&&r.matched.file) taken.push(r.matched.file);
       ok++;
     }catch(e){ failed.push(p.name); console.warn("portrait failed",p.name,e); }
     renderDash(); if(i===candIdx) renderPersona(p);
   }
   if(btn){btn.disabled=false;btn.textContent="全員の顔写真を生成";}
-  if(failed.length){
-    setPhotoStat(`${ok}件成功／${failed.length}件失敗（${failed.join("・")}）。失敗分はイラストのまま表示しています。`);
-  }else if(taken.length){
-    setPhotoStat(`${ok}件の顔写真を「${segLabel}」から割り当てました。`
-      +(mismatched?`（うち${mismatched}件は同セグメントの写真が足りず、近い分類で代用しています）`:""));
-  }else{
-    setPhotoStat(`${ok}件の顔写真を生成しました。`);
-  }
+  setPhotoStat(failed.length
+    ? `${ok}件成功／${failed.length}件失敗（${failed.join("・")}）。失敗分はイラストのまま表示しています。`
+    : `${ok}件の顔写真を生成しました。`);
 }
 
 /* ---------------- 画像プロンプトの確認（機能2の出力） ---------------- */
@@ -2582,7 +2848,284 @@ readFromPaste = async function(){
     applyCompany(r,"貼り付けテキスト（サーバー解析）");
   }catch(e){ $("#urlStat").innerHTML=`<span style="color:var(--s2)">解析に失敗しました：${esc(e.message)}</span>`; }
 };
+/* =====================================================================
+   顔写真プールの管理画面（サーバー不要）
+   ===================================================================== */
+
+let shImage=null, shRowGender=["male","female"], shPanelSeg=[];
+const shNum=(id,d)=>Number($("#"+id).value)||d;
+
+function loadImg(file){
+  return new Promise((res,rej)=>{
+    const url=URL.createObjectURL(file), img=new Image();
+    img.onload=()=>{img._url=url;res(img)};
+    img.onerror=()=>{URL.revokeObjectURL(url);rej(new Error("画像を読み込めませんでした"))};
+    img.src=url;
+  });
+}
+const freeImg=img=>{ if(img&&img._url) URL.revokeObjectURL(img._url); };
+
+/* 正方形に切り出す。丸型アバターに切る前提なので 1:1 でないと頭頂と顎が欠ける。
+   顔は中心よりやや上にあるので、上寄り（0.35）に取る。 */
+function squareData(img,sx,sy,sw,sh,size){
+  const side=Math.min(sw,sh);
+  const cx=sx+(sw-side)/2, cy=sy+(sh-side)*0.35;
+  const c=document.createElement("canvas"); c.width=c.height=size;
+  const ctx=c.getContext("2d"); ctx.imageSmoothingQuality="high";
+  ctx.drawImage(img,cx,cy,side,side,0,0,size,size);
+  return c.toDataURL("image/jpeg",0.8);
+}
+
+/* シートの幾何。パネル＝セグメント、各パネルは
+   見出し帯 →［写真の行 → ラベル帯］×N。ラベル帯を引かないと
+   切り出した顔の下に「①男性」の文字が写り込む。 */
+function shCells(){
+  if(!shImage) return [];
+  const W=shImage.naturalWidth, H=shImage.naturalHeight;
+  const pC=shNum("shPCols",1), pR=shNum("shPRows",1);
+  const gC=shNum("shGCols",1), gR=shNum("shGRows",1);
+  const head=shNum("shHead",0)/100, label=shNum("shLabel",0)/100;
+  const inset=Math.min(20,Math.max(0,shNum("shInset",0)))/100;
+  const panelW=W/pC, panelH=H/pR;
+  const bandH=(panelH*(1-head))/gR, photoH=bandH*(1-label), cellW=panelW/gC;
+  const out=[];
+  for(let pr=0;pr<pR;pr++) for(let pc=0;pc<pC;pc++){
+    const pi=pr*pC+pc, px=pc*panelW, py=pr*panelH+panelH*head;
+    for(let r=0;r<gR;r++) for(let c=0;c<gC;c++){
+      const ix=cellW*inset, iy=photoH*inset;
+      out.push({pi,r,c,x:px+c*cellW+ix,y:py+r*bandH+iy,w:cellW-ix*2,h:photoH-iy*2,
+                gender:shRowGender[r]||"unknown"});
+    }
+  }
+  return out;
+}
+
+function shDraw(){
+  if(!shImage) return;
+  const img=$("#shImg"), cv=$("#shOverlay");
+  if(!img.clientWidth) return;
+  cv.width=img.clientWidth; cv.height=img.clientHeight;
+  const ctx=cv.getContext("2d"); ctx.clearRect(0,0,cv.width,cv.height);
+  const sx=cv.width/shImage.naturalWidth, sy=cv.height/shImage.naturalHeight;
+  for(const c of shCells()){
+    const side=Math.min(c.w,c.h);
+    const x=(c.x+(c.w-side)/2)*sx, y=(c.y+(c.h-side)*0.35)*sy;
+    ctx.strokeStyle=c.gender==="female"?"rgba(163,74,147,.95)":"rgba(12,140,90,.95)";
+    ctx.lineWidth=2; ctx.strokeRect(x,y,side*sx,side*sy);
+  }
+}
+
+function shRenderRows(){
+  shRowGender=Array.from({length:shNum("shGRows",1)},(_,i)=>shRowGender[i]||(i===0?"male":"female"));
+  $("#shRowGenders").innerHTML=shRowGender.map((g,i)=>
+    `<select data-r="${i}" style="width:auto;padding:5px 8px;font-size:12px;border-radius:7px;margin-right:6px">
+      <option value="male"${g==="male"?" selected":""}>${i+1}行目：男性</option>
+      <option value="female"${g==="female"?" selected":""}>${i+1}行目：女性</option>
+      <option value="unknown"${g==="unknown"?" selected":""}>${i+1}行目：未設定</option></select>`).join("");
+  $$("#shRowGenders select").forEach(s=>s.onchange=()=>{shRowGender[+s.dataset.r]=s.value;shDraw()});
+}
+
+/* 実際のシートの並び順。SEGMENTS の定義順とは違うので、既定値はこちらに合わせる。
+   （左上から右へ）成長×大手／安定×ベンチャー／成長×ベンチャー
+   （2行目）      安定×大手／安定×中小／成長×中小
+   別の並びのシートを使う場合は、各パネルのプルダウンで直せる。 */
+const SHEET_PRESET_ORDER = [
+  "growth:large", "stability:venture", "growth:venture",
+  "stability:large", "stability:small", "growth:small",
+];
+
+function shRenderPanels(){
+  const n=shNum("shPCols",1)*shNum("shPRows",1);
+  shPanelSeg=Array.from({length:n},(_,i)=>shPanelSeg[i]||SHEET_PRESET_ORDER[i]||(SEGMENTS[i]||{}).key||"");
+  $("#shPanels").innerHTML=`<div class="eyebrow">各パネルのセグメント（左上から右へ）</div>
+    <p class="hint" style="margin:4px 0 0;font-size:12px">既定はシートの並び順に合わせてあります。
+    <b>シート上の見出しと一致しているか必ず確認してください。</b></p>`+
+    shPanelSeg.map((k,i)=>`<div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+      <span style="font-size:12px;color:var(--ink-3);width:76px">パネル ${i+1}</span>
+      <select data-p="${i}" style="max-width:320px;padding:6px 9px;font-size:12.5px;border-radius:8px">
+        <option value="">分類しない</option>
+        ${SEGMENTS.map(s=>`<option value="${s.key}"${s.key===k?" selected":""}>${s.label}</option>`).join("")}
+      </select></div>`).join("");
+  $$("#shPanels select").forEach(s=>s.onchange=()=>{shPanelSeg[+s.dataset.p]=s.value});
+}
+
+function addPhotos(items){
+  let seq=photoPool.length;
+  for(const it of items) photoPool.push({...it, id:`ph${++seq}_${Math.random().toString(36).slice(2,7)}`});
+  const ok=savePhotoPool();
+  renderPhotoAdmin();
+  if(!ok) toast("枚数が多くブラウザに保存できませんでした。HTMLの書き出しをお使いください");
+  return ok;
+}
+
+/* ---------- 管理画面の描画 ---------- */
+function renderPhotoAdmin(){
+  const n=photoPool.length;
+  const cover=SEGMENTS.map(s=>{
+    const hit=photoPool.filter(p=>p.orientation===s.orientation&&p.companySize===s.companySize);
+    return {...s, male:hit.filter(p=>p.gender==="male").length, female:hit.filter(p=>p.gender==="female").length};
+  });
+  $("#poolState").innerHTML = n
+    ? `<span style="color:var(--good);font-weight:700">● ${n}枚 登録済み</span>
+       <span style="color:var(--ink-3)">ペルソナには、セグメント（志向 × 志望企業規模）・性別・年齢の合う写真が自動で割り当てられます。<br>
+       STEP 2 の「全員の顔写真を生成」を押してください。</span>`
+    : `<span style="color:var(--s2);font-weight:700">● まだ写真がありません</span>
+       <span style="color:var(--ink-3)">下のいずれかの方法で顔写真を登録すると、ペルソナに実写が付きます。</span>`;
+
+  const cell=v=>v===0?`<b style="color:var(--crit)">0</b>`:v<3?`<b style="color:var(--s2)">${v}</b>`:`${v}`;
+  $("#poolCoverage").innerHTML = n ? `<table style="border-collapse:collapse;font-size:12.5px">
+    <tr style="color:var(--ink-3);text-align:left"><th style="padding:3px 14px 3px 0">セグメント</th>
+    <th style="padding:3px 14px 3px 0">男性</th><th>女性</th></tr>
+    ${cover.map(c=>`<tr><td style="padding:2px 14px 2px 0">${esc(c.label)}</td>
+      <td style="padding:2px 14px 2px 0">${cell(c.male)}</td><td>${cell(c.female)}</td></tr>`).join("")}
+    </table><p class="hint" style="margin:8px 0 0;font-size:12px">
+    1セグメントあたり男女3枚以上あると、5人出しても顔の使い回しが起きません。
+    0 のセグメントは近い分類の写真で代用されます。</p>` : "";
+
+  const segOpts=p=>`<option value="">分類なし</option>`+SEGMENTS.map(s=>
+    `<option value="${s.key}"${s.key===`${p.orientation||""}:${p.companySize||""}`?" selected":""}>${s.label}</option>`).join("");
+  $("#poolGrid").innerHTML = photoPool.map(p=>`
+    <div class="card" data-id="${p.id}" style="padding:0;overflow:hidden">
+      <img src="${p.dataUrl}" alt="" style="display:block;width:100%;aspect-ratio:1;object-fit:cover">
+      <div style="padding:7px 8px;display:flex;flex-direction:column;gap:5px">
+        <select class="ps" style="font-size:11px;padding:3px 5px;border-radius:6px">${segOpts(p)}</select>
+        <select class="pg" style="font-size:11px;padding:3px 5px;border-radius:6px">
+          <option value="unknown"${p.gender==="unknown"?" selected":""}>未設定</option>
+          <option value="male"${p.gender==="male"?" selected":""}>男性</option>
+          <option value="female"${p.gender==="female"?" selected":""}>女性</option></select>
+        <input class="pa" type="number" min="15" max="70" value="${p.age||22}" style="font-size:11px;padding:3px 5px;border-radius:6px">
+        <button class="btn ghost sm pd" type="button" style="padding:2px 6px;font-size:11px;color:var(--crit)">削除</button>
+      </div></div>`).join("") ||
+    `<p class="hint" style="grid-column:1/-1;margin:0">まだ写真がありません。</p>`;
+
+  $$("#poolGrid [data-id]").forEach(el=>{
+    const p=photoPool.find(x=>x.id===el.dataset.id); if(!p) return;
+    const save=()=>{
+      const [o,c]=(el.querySelector(".ps").value||":").split(":");
+      p.orientation=o; p.companySize=c;
+      p.gender=el.querySelector(".pg").value;
+      p.age=Number(el.querySelector(".pa").value)||22;
+      savePhotoPool(); renderPhotoAdmin();
+    };
+    el.querySelector(".ps").onchange=save;
+    el.querySelector(".pg").onchange=save;
+    el.querySelector(".pa").onchange=save;
+    el.querySelector(".pd").onclick=()=>{
+      photoPool=photoPool.filter(x=>x.id!==p.id); savePhotoPool(); renderPhotoAdmin();
+    };
+  });
+
+  const one=$("#oneSeg");
+  if(one && !one.options.length){
+    one.innerHTML=`<option value="">分類しない</option>`+SEGMENTS.map(s=>`<option value="${s.key}">${s.label}</option>`).join("");
+  }
+}
+
+/* ---------- HTMLの書き出し ----------
+   顔写真を埋め込んだ複製を作る。書き出したファイルは、開くだけで顔写真つきで動く。
+
+   元にするのは PRISTINE_HTML（描画が始まる前に控えておいた素の状態）。
+   その場の document をそのまま写すと、開いていた画面や描画済みのペルソナカードまで
+   焼き付いてしまい、開いた人が変な状態から始まることになる。 */
+function exportHtmlWithPhotos(){
+  if(!photoPool.length){ toast("先に顔写真を登録してください"); return; }
+  const src=PRISTINE_HTML;
+  const START="/* EMBEDDED_PHOTOS_START */", END="/* EMBEDDED_PHOTOS_END */";
+  const i=src.indexOf(START), j=src.indexOf(END);
+  if(i<0||j<0){ toast("書き出しの目印が見つかりませんでした"); return; }
+  const out="<!doctype html>\n"+src.slice(0,i+START.length)+JSON.stringify(photoPool)+src.slice(j);
+  const blob=new Blob([out],{type:"text/html"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="persona-studio-photos.html";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  toast(`${photoPool.length}枚を埋め込んだHTMLを書き出しました`);
+}
+
+/* ---------- イベント ---------- */
+function initPhotoAdmin(){
+  $("#shPreset").onclick=()=>{
+    $("#shPCols").value=3; $("#shPRows").value=2;
+    $("#shGRows").value=2; $("#shGCols").value=5;
+    $("#shHead").value=9; $("#shLabel").value=16; $("#shInset").value=3;
+    shRowGender=["male","female"];
+    shPanelSeg=SHEET_PRESET_ORDER.slice();   // 並び順も既定に戻す
+    shRenderRows(); shRenderPanels(); shDraw();
+  };
+
+  $("#shFile").onchange=async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    try{
+      freeImg(shImage);
+      shImage=await loadImg(f);
+      $("#shControls").classList.remove("hidden");
+      $("#shImg").onload=shDraw;
+      $("#shImg").src=shImage._url;
+      $("#shSlice").disabled=false;
+      shRenderRows(); shRenderPanels(); setTimeout(shDraw,60);
+      $("#shStat").textContent=`${shImage.naturalWidth}×${shImage.naturalHeight}px を読み込みました。枠が顔に合うまで数値を調整してください。`;
+    }catch(err){ $("#shStat").textContent="読み込みに失敗しました："+err.message; }
+    finally{ e.target.value=""; }
+  };
+
+  ["shPCols","shPRows","shGRows","shGCols","shHead","shLabel","shInset"].forEach(id=>{
+    $("#"+id).oninput=()=>{
+      if(id==="shGRows") shRenderRows();
+      if(id==="shPCols"||id==="shPRows") shRenderPanels();
+      shDraw();
+    };
+  });
+  window.addEventListener("resize",shDraw);
+
+  $("#shSlice").onclick=()=>{
+    if(!shImage) return;
+    const cells=shCells(), age=shNum("shAge",22);
+    $("#shStat").textContent=`${cells.length}枚を切り出しています…`;
+    const items=cells.map(c=>{
+      const key=shPanelSeg[c.pi]||"";
+      const [orientation,companySize]=key?key.split(":"):["",""];
+      return {dataUrl:squareData(shImage,c.x,c.y,c.w,c.h,448),
+              gender:c.gender, age, orientation, companySize, tags:[]};
+    });
+    addPhotos(items);
+    $("#shStat").textContent=`${items.length}枚を登録しました。下の一覧で、うまく切り出せていない写真は削除してください。`;
+  };
+
+  $("#oneFile").onchange=async e=>{
+    const files=[...e.target.files]; if(!files.length) return;
+    $("#oneStat").textContent=`${files.length}枚を処理しています…`;
+    try{
+      const [orientation,companySize]=($("#oneSeg").value||":").split(":");
+      const gender=$("#oneGender").value, age=Number($("#oneAge").value)||22;
+      const items=[];
+      for(const f of files){
+        const img=await loadImg(f);
+        items.push({dataUrl:squareData(img,0,0,img.naturalWidth,img.naturalHeight,448),
+                    gender, age, orientation, companySize, tags:[]});
+        freeImg(img);
+      }
+      addPhotos(items);
+      $("#oneStat").textContent=`${items.length}枚を登録しました。`;
+    }catch(err){ $("#oneStat").textContent="取り込みに失敗しました："+err.message; }
+    finally{ e.target.value=""; }
+  };
+
+  $("#poolExport").onclick=exportHtmlWithPhotos;
+  $("#poolClear").onclick=()=>{
+    if(!photoPool.length) return;
+    if(!confirm(`登録済みの ${photoPool.length}枚をすべて削除しますか？`)) return;
+    photoPool=[]; savePhotoPool(); renderPhotoAdmin();
+  };
+}
+
+/* 描画が始まる前の素のHTMLを控える。書き出しはこれを元にする。
+   この <script> はbody最後の要素なので、この時点でDOMは著作時のままの完全な状態。 */
+const PRISTINE_HTML = document.documentElement.outerHTML;
+
+loadPhotoPool();
 init();
+initPhotoAdmin();
 </script>
 </body>
 </html>
