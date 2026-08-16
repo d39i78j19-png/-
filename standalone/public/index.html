@@ -3211,12 +3211,27 @@ const SHEET_PRESET_ORDER = [
   "stability:large", "stability:small", "growth:small",
 ];
 
+/* まだ1枚も登録されていないセグメント。
+   セグメントごとに分けたシートを順に読み込む使い方で、
+   毎回プルダウンを選び直さずに済むようにする。 */
+function firstEmptySegment(){
+  const hit=SEGMENTS.find(sg=>!photoPool.some(ph=>ph.orientation===sg.orientation&&ph.companySize===sg.companySize));
+  return hit?hit.key:SEGMENTS[0].key;
+}
+
 function shRenderPanels(){
   const n=shNum("shPCols",1)*shNum("shPRows",1);
-  shPanelSeg=Array.from({length:n},(_,i)=>shPanelSeg[i]||SHEET_PRESET_ORDER[i]||(SEGMENTS[i]||{}).key||"");
-  $("#shPanels").innerHTML=`<div class="eyebrow">各パネルのセグメント（左上から右へ）</div>
-    <p class="hint" style="margin:4px 0 0;font-size:12px">既定はシートの並び順に合わせてあります。
-    <b>シート上の見出しと一致しているか必ず確認してください。</b></p>`+
+  /* パネルが1つだけ＝1セグメント分のシート。既定は「まだ空いている分類」にする。
+     複数パネルならシートの並び順に合わせる。 */
+  const fallback=i=>n===1?firstEmptySegment():(SHEET_PRESET_ORDER[i]||(SEGMENTS[i]||{}).key||"");
+  shPanelSeg=Array.from({length:n},(_,i)=>shPanelSeg[i]||fallback(i));
+  $("#shPanels").innerHTML=(n===1
+    ? `<div class="eyebrow">このシートの分類</div>
+       <p class="hint" style="margin:4px 0 0;font-size:12px">まだ登録の無い分類を選んであります。
+       <b>シート上の見出しと一致しているか確認してください。</b></p>`
+    : `<div class="eyebrow">各パネルのセグメント（左上から右へ）</div>
+       <p class="hint" style="margin:4px 0 0;font-size:12px">既定はシートの並び順に合わせてあります。
+       <b>シート上の見出しと一致しているか必ず確認してください。</b></p>`)+
     shPanelSeg.map((k,i)=>`<div style="display:flex;gap:8px;align-items:center;margin-top:6px">
       <span style="font-size:12px;color:var(--ink-3);width:76px">パネル ${i+1}</span>
       <select data-p="${i}" style="max-width:320px;padding:6px 9px;font-size:12.5px;border-radius:8px">
@@ -3470,7 +3485,7 @@ function initPhotoAdmin(){
         $("#shGRows").value=shDetected.rowsPerPanel;
         $("#shGCols").value=shDetected.colsPerRow;
         shRowGender=Array.from({length:shDetected.rowsPerPanel},(_,i)=>i===0?"male":"female");
-        shPanelSeg=SHEET_PRESET_ORDER.slice();
+        shPanelSeg=[];   // 前のシートの割り当てを持ち越さない
         $("#shStat").innerHTML=
           `<b style="color:var(--good)">自動検出しました</b>：`
           +`パネル ${shDetected.panelCols}列×${shDetected.panelRows}行、`
