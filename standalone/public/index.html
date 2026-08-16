@@ -2993,30 +2993,66 @@ function shAnalyze(img){
   };
 
   /* --- 1. 見出し帯を探す ---
-     見出しは濃い単色なので、行あたりの彩度が突出して高い。
-     顔写真の行も、濃紺のスーツや髪でそれなりの彩度は出る（実測 0.11〜0.34）が、
-     見出し（実測 0.64〜0.76）とは倍以上の開きがある。
-     固定のしきい値だけだとシートの配色で外すので、
-     その画像の最大値からの相対でも見て、高い方を採る。 */
-  const rowSat=new Float32Array(H), rowWhite=new Float32Array(H);
+     平均彩度で見ると、見出しに乗った白い文字に引きずられて値が落ち、
+     1本の帯が2〜3本に割れる（実測 0.98 → 0.50）。
+     そこで「色が乗っている画素の割合」で見る。文字は帯の中では少数派なので、
+     割合で見れば見出しは 0.6 以上を保ち、顔写真の行とはっきり分かれる。 */
+  const colored = i => !white(i) && sat(i) > 0.35;
+
+  const rowColor = new Float32Array(H), rowWhite = new Float32Array(H);
   for(let y=0;y<H;y++){
-    let s=0,w=0;
-    for(let x=0;x<W;x++){ const i=(y*W+x)*4; s+=sat(i); if(white(i))w++; }
-    rowSat[y]=s/W; rowWhite[y]=w/W;
+    let c=0,w=0;
+    for(let x=0;x<W;x++){ const i=(y*W+x)*4; if(colored(i)) c++; if(white(i)) w++; }
+    rowColor[y]=c/W; rowWhite[y]=w/W;
   }
-  let maxSat=0; for(let y=0;y<H;y++) if(rowSat[y]>maxSat) maxSat=rowSat[y];
-  const satGate = Math.max(0.45, maxSat*0.55);
-  const headers = runs(H, y=>rowSat[y]>satGate && rowWhite[y]<0.30, Math.max(5,H*0.012));
+  let headers = runs(H, y=>rowColor[y]>0.60, Math.max(5,H*0.012));
+
+  /* 文字が特に濃い行で途切れることがあるので、近接する帯はつなぐ。
+     パネルが本当に複数行あるシートでは帯どうしが画面の半分ほど離れるため、
+     この距離ではつながらない。 */
+  const joinGap = Math.max(8, H*0.04);
+  headers = headers.reduce((acc,r)=>{
+    const last=acc[acc.length-1];
+    if(last && r[0]-last[1] < joinGap) last[1]=r[1];
+    else acc.push([r[0],r[1]]);
+    return acc;
+  },[]);
+
+  /* 見出しは必ずパネルの一番上にある。画像の途中に出た色の濃い帯
+     （服や背景が偶然そろった行）は見出しではないので、
+     「直前が写真ではなく余白／画像の先頭」であるものだけを残す。 */
+  headers = headers.filter(([y0,y1])=>{
+    if(y0 <= H*0.02) return true;              // 画像の先頭
+    let w=0; const probe=Math.max(3,Math.round(H*0.01));
+    for(let y=Math.max(0,y0-probe);y<y0;y++) w+=rowWhite[y];
+    return (w/probe) > 0.55;                   // 直前が白い＝パネルの境目
+  });
+
   const pRows = headers.length;
   if(pRows<1 || pRows>6) return null;
 
   /* --- 2. パネルの列 ---
-     見出し帯の中だけを横に見る。パネルごとに色が違い、間は白なので、
-     色の乗っている区間がそのままパネルの列になる。 */
+     見出し帯の中を横に見る。ここも平均では白文字で切れてしまうので、
+     「その列のうち何割の行に色が乗っているか」で見る。 */
   const [h0,h1]=headers[0];
-  const colSat=new Float32Array(W);
-  for(let x=0;x<W;x++){ let s=0; for(let y=h0;y<h1;y++) s+=sat((y*W+x)*4); colSat[x]=s/(h1-h0); }
-  let panelCols = runs(W, x=>colSat[x]>0.25, Math.max(10, W*0.05));
+  const bandH=h1-h0;
+  const colColor=new Float32Array(W);
+  for(let x=0;x<W;x++){
+    let c=0;
+    for(let y=h0;y<h1;y++) if(colored((y*W+x)*4)) c++;
+    colColor[x]=c/bandH;
+  }
+  /* しきい値は低くてよい。パネルとパネルの間は完全な白（割合0）になるのに対し、
+     見出しの文字の上でも、その列のどこかの行には必ず地色が残るため。
+     高くすると、長い見出し文字の上で列が割れる（実測 seg02 で2列に分断された）。 */
+  let panelCols = runs(W, x=>colColor[x]>0.15, Math.max(10, W*0.05));
+  if(!panelCols.length) return null;
+
+  /* パネルは必ず等幅に並ぶ。見出しの端に入った十数pxの隙間が独立した列として
+     拾われることがあるので（実測 seg02 で幅72pxの偽の列が出た）、
+     いちばん広い列の半分に満たないものは捨てる。 */
+  const widest = Math.max(...panelCols.map(([a,b])=>b-a));
+  panelCols = panelCols.filter(([a,b])=>(b-a) >= widest*0.5);
   if(!panelCols.length || panelCols.length>6) return null;
 
   /* --- 3. パネル内の写真の行 ---
