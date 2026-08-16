@@ -11,14 +11,24 @@
  * APIキーはサーバーの環境変数からのみ読み、ブラウザには一切渡さない。
  * 依存パッケージは 0。`node standalone/server.js` だけで起動する。
  *
+ * 画像は Gemini（Nano Banana）と OpenAI のどちらでも作れる。あるキーから自動で
+ * 選ぶので、片方しか持っていなくてもそのまま動く。
+ *
  * 環境変数:
- *   GEMINI_API_KEY      画像生成に必須。未設定ならプール画像／プレースホルダを返す
+ *   GEMINI_API_KEY      画像生成（既定の経路）
+ *   OPENAI_API_KEY      画像生成（GEMINI_API_KEY が無いとき自動で使う）
  *   ANTHROPIC_API_KEY   ペルソナ本文と各種AI診断。未設定ならルールベース
- *   PORTRAIT_MODEL      既定 gemini-3-pro-image
- *   PORTRAIT_SIZE       既定 2K（512 / 1K / 2K / 4K）
+ *   PORTRAIT_PROVIDER   auto（既定）/ gemini / openai
+ *   PORTRAIT_MODEL      Gemini 側のモデル。既定 gemini-3-pro-image
+ *   PORTRAIT_SIZE       Gemini 側の解像度。既定 2K（512 / 1K / 2K / 4K）
+ *   OPENAI_IMAGE_MODEL  OpenAI 側のモデル。既定 gpt-image-1
+ *   OPENAI_IMAGE_QUALITY  low / medium / high（既定 high）
  *   PORTRAIT_WARDROBE   auto（既定・リクルートスーツ）/ casual（私服）
  *   PORTRAIT_SCENE      student（既定）/ office
  *   PORT                既定 8787
+ *
+ * どちらのキーも無い場合は事前生成プール、それも無ければプレースホルダを返す。
+ * 画面が壊れることはない。
  */
 
 "use strict";
@@ -28,17 +38,21 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { buildPortraitPrompt } = require("./lib/portrait-prompt");
-const { generateImage, DEFAULT_MODEL } = require("./lib/gemini-image");
+const imageProvider = require("./lib/image-provider");
 const store = require("./lib/photo-store");
 const text = require("./lib/persona-text");
 
 const PORT = Number(process.env.PORT) || 8787;
-const MODEL = process.env.PORTRAIT_MODEL || DEFAULT_MODEL;
-const SIZE = process.env.PORTRAIT_SIZE || "2K";
 const WARDROBE = process.env.PORTRAIT_WARDROBE || "auto";
 const SCENE = process.env.PORTRAIT_SCENE || "student";
 
-const hasGemini = () => Boolean(process.env.GEMINI_API_KEY);
+/* 起動時に1度だけ解決する。途中でキーが増えることはない。 */
+const PROVIDER = imageProvider.resolveProvider();
+const canGenerate = () => PROVIDER.name !== "none";
+
+/* キャッシュキーにはモデルと解像度も混ぜる。同じ文章でもプロバイダが違えば別の絵になる。 */
+const cacheKeyFor = (prompt) =>
+  store.cacheKey(prompt, `${PROVIDER.name}:${PROVIDER.model}`, PROVIDER.size + PROVIDER.quality);
 
 /* ===================== 画像の解決 =====================
    キャッシュ → API生成 → 事前生成プール → プレースホルダ の順に落とす。
@@ -51,40 +65,38 @@ async function resolvePortrait(persona, index) {
     industry: persona._industry,
   });
 
-  const key = store.cacheKey(built.prompt, MODEL, SIZE);
+  const key = cacheKeyFor(built.prompt);
   const cached = store.findCached(key);
   if (cached) {
     return { url: cached.url, prompt: built.prompt, variable: built.variable,
-             provider: "gemini(cache)", model: MODEL, mock: false, cached: true };
+             provider: `${PROVIDER.name}(cache)`, model: PROVIDER.model, mock: false, cached: true };
   }
 
-  if (hasGemini()) {
-    const img = await generateImage({
-      prompt: built.prompt,
-      apiKey: process.env.GEMINI_API_KEY,
-      model: MODEL,
-      size: SIZE,
-      aspect: "1:1", // 丸型アバターに切る前提。他比率から丸く切ると頭頂と顎が欠ける
-    });
+  if (canGenerate()) {
+    // 丸型アバターに切る前提なので 1:1。他比率から丸く切ると頭頂と顎が欠ける。
+    const img = await imageProvider.generate({ prompt: built.prompt, aspect: "1:1" }, PROVIDER);
     const saved = store.saveCached(key, img.data, img.mimeType);
     return { url: saved.url, prompt: built.prompt, variable: built.variable,
-             provider: "gemini", model: MODEL, mock: false, cached: false };
+             provider: PROVIDER.name, model: PROVIDER.model, mock: false, cached: false };
   }
 
   const pooled = store.fromPool(persona.gender, index);
   if (pooled) {
     return { url: pooled.url, prompt: built.prompt, variable: built.variable,
-             provider: "pool", model: "", mock: true,
-             note: "GEMINI_API_KEY 未設定のため、事前生成プールの写真を割り当てました" };
+             provider: "pool", model: "", mock: true, note: NO_KEY_NOTE_POOL };
   }
 
   return {
     dataUrl: store.placeholder(persona.name, persona.gender),
     prompt: built.prompt, variable: built.variable,
-    provider: "placeholder", model: "", mock: true,
-    note: "GEMINI_API_KEY 未設定。プレースホルダを表示しています",
+    provider: "placeholder", model: "", mock: true, note: NO_KEY_NOTE,
   };
 }
+
+const NO_KEY_NOTE =
+  "画像生成用のAPIキー（GEMINI_API_KEY または OPENAI_API_KEY）が未設定です。プレースホルダを表示しています";
+const NO_KEY_NOTE_POOL =
+  "画像生成用のAPIキーが未設定のため、事前生成プールの写真を割り当てました";
 
 /* ===================== ルーティング ===================== */
 
@@ -94,7 +106,8 @@ const routes = {
     const built = buildPortraitPrompt(persona, Number(body.index) || 0, {
       wardrobe: WARDROBE, scene: SCENE, industry: body.industry,
     });
-    return { prompt: built.prompt, variable: built.variable, fixed: built.fixed, model: MODEL, size: SIZE };
+    return { prompt: built.prompt, variable: built.variable, fixed: built.fixed,
+             provider: PROVIDER.name, model: PROVIDER.model, size: PROVIDER.size };
   },
 
   "POST /api/persona/image": async (body) => {
@@ -104,25 +117,22 @@ const routes = {
 
     // 画面側で組み立てたプロンプトが渡ってきた場合はそれを尊重する。
     if (body.prompt) {
-      const key = store.cacheKey(body.prompt, MODEL, SIZE);
+      const key = cacheKeyFor(body.prompt);
       const cached = store.findCached(key);
-      if (cached) return { url: cached.url, prompt: body.prompt, provider: "gemini(cache)", mock: false, cached: true };
-
-      if (hasGemini()) {
-        const img = await generateImage({
-          prompt: body.prompt, apiKey: process.env.GEMINI_API_KEY,
-          model: MODEL, size: SIZE, aspect: "1:1",
-        });
+      if (cached) {
+        return { url: cached.url, prompt: body.prompt, provider: `${PROVIDER.name}(cache)`, mock: false, cached: true };
+      }
+      if (canGenerate()) {
+        const img = await imageProvider.generate({ prompt: body.prompt, aspect: "1:1" }, PROVIDER);
         const saved = store.saveCached(key, img.data, img.mimeType);
-        return { url: saved.url, prompt: body.prompt, provider: "gemini", model: MODEL, mock: false };
+        return { url: saved.url, prompt: body.prompt, provider: PROVIDER.name, model: PROVIDER.model, mock: false };
       }
       const pooled = store.fromPool(persona.gender, index);
       if (pooled) {
-        return { url: pooled.url, prompt: body.prompt, provider: "pool", mock: true,
-                 note: "GEMINI_API_KEY 未設定のため、事前生成プールの写真を割り当てました" };
+        return { url: pooled.url, prompt: body.prompt, provider: "pool", mock: true, note: NO_KEY_NOTE_POOL };
       }
       return { dataUrl: store.placeholder(persona.name, persona.gender), prompt: body.prompt,
-               provider: "placeholder", mock: true, note: "GEMINI_API_KEY 未設定" };
+               provider: "placeholder", mock: true, note: NO_KEY_NOTE };
     }
 
     return resolvePortrait(persona, index);
@@ -182,8 +192,10 @@ const routes = {
     return {
       results,
       model: usedModel,
-      imageProvider: hasGemini() ? MODEL : results.some((r) => r.image.provider === "pool") ? "pool" : "placeholder",
-      mock: !text.hasTextKey() || !hasGemini(),
+      imageProvider: canGenerate()
+        ? PROVIDER.label
+        : results.some((r) => r.image.provider === "pool") ? "pool" : "placeholder",
+      mock: !text.hasTextKey() || !canGenerate(),
       sourcePages,
     };
   },
@@ -200,12 +212,18 @@ function healthPayload() {
   return {
     // 画面側の変数名が hasOpenAI なので合わせている。実体は「テキストAIが使えるか」。
     hasOpenAI: text.hasTextKey(),
-    hasGemini: hasGemini(),
-    imageProvider: hasGemini() ? "gemini" : poolCount ? "pool" : "mock",
-    imageModel: hasGemini() ? MODEL : poolCount ? `事前生成プール ${poolCount}枚` : "プレースホルダ",
+    // 実写の顔写真を今この瞬間に生成できるか。画面のバッジはこれを見る。
+    canGeneratePhotos: canGenerate(),
+    // 旧名。画面の古い版が参照していたので互換のために残す。
+    hasGemini: canGenerate(),
+    imageProvider: canGenerate() ? PROVIDER.name : poolCount ? "pool" : "mock",
+    imageModel: canGenerate()
+      ? PROVIDER.model
+      : poolCount ? `事前生成プール ${poolCount}枚` : "プレースホルダ",
     textModel: text.hasTextKey() ? text.TEXT_MODEL : "ルールベース",
-    mock: !hasGemini(),
-    portraitSize: SIZE,
+    mock: !canGenerate(),
+    portraitSize: canGenerate() ? PROVIDER.size : "",
+    portraitQuality: PROVIDER.quality,
     wardrobe: WARDROBE,
     scene: SCENE,
     poolCount,
@@ -303,11 +321,12 @@ store.ensureDirs();
 server.listen(PORT, () => {
   const h = healthPayload();
   console.log(`\n  ペルソナ顔写真生成サーバー  http://localhost:${PORT}\n`);
-  console.log(`  画像 : ${h.imageProvider}（${h.imageModel}）${h.hasGemini ? ` / ${SIZE} / 1:1` : ""}`);
+  console.log(`  画像 : ${canGenerate() ? `${PROVIDER.name}（${PROVIDER.label} / 1:1）` : h.imageModel}`);
   console.log(`  本文 : ${h.textModel}`);
-  if (!h.hasGemini) {
-    console.log(`\n  GEMINI_API_KEY が未設定です。実写の顔写真を出すには:`);
-    console.log(`    export GEMINI_API_KEY="..." && node standalone/server.js`);
+  if (!canGenerate()) {
+    console.log(`\n  画像生成用のAPIキーが未設定です。実写の顔写真を出すには次のどちらかを設定してください:`);
+    console.log(`    export GEMINI_API_KEY="..."    # 推奨。人物ポートレートの写実性が安定して高い`);
+    console.log(`    export OPENAI_API_KEY="..."    # gpt-image-1 で生成`);
     console.log(`  事前にプールを焼いておく場合:`);
     console.log(`    node standalone/bin/generate-pool.mjs --dry-run`);
   }

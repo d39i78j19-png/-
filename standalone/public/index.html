@@ -2065,17 +2065,18 @@ function renderServerBadge(){
   const el=$("#srvBadge");
   /* 画面上でいちばん知りたいのは「今この瞬間、実写の顔写真が出るのか」なので、
      テキストAIの有無ではなく画像側の状態を主に出す。 */
-  const photoLine = srv.hasGemini
-    ? `<span style="color:var(--good)">実写生成が有効です（${esc(srv.imageModel)}／${esc(srv.portraitSize||"")}）</span>`
+  const canPhoto = srv.canGeneratePhotos ?? srv.hasGemini;
+  const photoLine = canPhoto
+    ? `<span style="color:var(--good)">実写生成が有効です（${esc(srv.imageProvider)}／${esc(srv.imageModel)}／${esc(srv.portraitSize||"")}）</span>`
     : srv.poolCount
-      ? `<span style="color:var(--s2)">GEMINI_API_KEY 未設定 — 事前生成プール ${srv.poolCount}枚 から割り当てます</span>`
-      : `<span style="color:var(--s2)">GEMINI_API_KEY 未設定 — プレースホルダを表示します。実写にするには
-         <code>export GEMINI_API_KEY=…</code> を設定してサーバーを起動し直してください</span>`;
+      ? `<span style="color:var(--s2)">画像APIキー未設定 — 事前生成プール ${srv.poolCount}枚 から割り当てます</span>`
+      : `<span style="color:var(--s2)">画像APIキー未設定 — プレースホルダを表示します。実写にするには
+         <code>GEMINI_API_KEY</code> か <code>OPENAI_API_KEY</code> を設定してサーバーを起動し直してください</span>`;
 
   const line = !srv.ok
     ? `<span style="color:var(--ink-3)">○ サーバー未接続 — 顔写真は生成できません。
        <code>node standalone/server.js</code> を起動し <b>http://localhost:8787</b> を開いてください。</span>`
-    : `<span style="color:${srv.hasGemini?"var(--good)":"var(--s2)"};font-weight:700">● 接続済み</span>
+    : `<span style="color:${canPhoto?"var(--good)":"var(--s2)"};font-weight:700">● 接続済み</span>
        <span style="color:var(--ink-3)">顔写真：${photoLine}<br>
        ペルソナ本文：${esc(srv.textModel)}${srv.hasOpenAI?"":"（ANTHROPIC_API_KEY 未設定のためルールベース）"}<br>
        APIキーはサーバーの環境変数からのみ読み込まれ、ブラウザには渡していません。</span>`;
@@ -2084,8 +2085,8 @@ function renderServerBadge(){
   $$("[data-needkey]").forEach(b=>{ b.disabled=!(srv.ok&&srv.hasOpenAI); });
   const chip=$("#srvChip");
   if(chip){
-    chip.textContent = !srv.ok ? "サーバー未接続" : srv.hasGemini ? "実写生成 有効" : srv.poolCount ? "プール画像" : "画像キー未設定";
-    chip.style.background = !srv.ok ? "rgba(255,255,255,.12)" : srv.hasGemini ? "rgba(12,163,12,.35)" : "rgba(250,178,25,.35)";
+    chip.textContent = !srv.ok ? "サーバー未接続" : canPhoto ? "実写生成 有効" : srv.poolCount ? "プール画像" : "画像キー未設定";
+    chip.style.background = !srv.ok ? "rgba(255,255,255,.12)" : canPhoto ? "rgba(12,163,12,.35)" : "rgba(250,178,25,.35)";
   }
 }
 

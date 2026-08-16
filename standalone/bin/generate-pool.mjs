@@ -24,11 +24,13 @@
  *   --only <id>        1件だけ生成
  *   --personas <file>  ペルソナ定義JSON（配列 or {personas:[...]}）
  *   --out <dir>        出力先（既定 standalone/public/personas/pool）
- *   --model <id>       既定 gemini-3-pro-image
- *   --size <s>         512 / 1K / 2K / 4K（既定 2K）
+ *   --provider <p>     auto（既定）/ gemini / openai。あるキーから自動で選ぶ
+ *   --model <id>       既定 gemini-3-pro-image ／ OpenAI 側は gpt-image-1
+ *   --size <s>         Gemini のみ。512 / 1K / 2K / 4K（既定 2K）
+ *   --quality <q>      OpenAI のみ。low / medium / high（既定 high）
  *   --wardrobe <m>     auto（リクルートスーツ）/ casual（私服）
  *   --scene <s>        student / office
- *   --anchor <file>    同一人物の別カットを作るときの参照画像
+ *   --anchor <file>    同一人物の別カットを作るときの参照画像（Gemini のみ）
  *   --force            既存ファイルがあっても作り直す
  */
 
@@ -36,10 +38,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import promptLib from "../lib/portrait-prompt.js";
-import geminiLib from "../lib/gemini-image.js";
+import providerLib from "../lib/image-provider.js";
 
 const { buildPortraitPrompt } = promptLib;
-const { generateImage, estimateCost, DEFAULT_MODEL } = geminiLib;
+const { resolveProvider, generate, estimateCost } = providerLib;
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_OUT = path.join(HERE, "..", "public", "personas", "pool");
@@ -57,12 +59,31 @@ const force = flag("force");
 const count = Number(opt("count", 12));
 const only = opt("only", "");
 const outDir = path.resolve(opt("out", DEFAULT_OUT));
-const model = opt("model", DEFAULT_MODEL);
-const size = opt("size", "2K");
 const wardrobe = opt("wardrobe", "auto");
 const scene = opt("scene", "student");
 const anchorFile = opt("anchor", "");
 const personasFile = opt("personas", "");
+
+/* コマンドライン引数は環境変数と同じ経路で解決させる。
+   こうしておくとサーバー側と選択ロジックが1つで済む。 */
+const env = { ...process.env };
+if (opt("provider", "")) env.PORTRAIT_PROVIDER = opt("provider", "");
+if (opt("model", "")) {
+  const p = (env.PORTRAIT_PROVIDER || "auto").toLowerCase();
+  const toOpenAI = p === "openai" || (p !== "gemini" && !env.GEMINI_API_KEY && env.OPENAI_API_KEY);
+  if (toOpenAI) env.OPENAI_IMAGE_MODEL = opt("model", "");
+  else env.PORTRAIT_MODEL = opt("model", "");
+}
+if (opt("size", "")) env.PORTRAIT_SIZE = opt("size", "");
+if (opt("quality", "")) env.OPENAI_IMAGE_QUALITY = opt("quality", "");
+
+/* --dry-run は課金前の確認用なので、キーが無くても費用の目安を出せるようにする。
+   キーが1つも無ければ既定（Gemini）の単価で見積もる。 */
+const provider = (() => {
+  const p = resolveProvider(env);
+  if (p.name !== "none") return p;
+  return resolveProvider({ ...env, GEMINI_API_KEY: "dummy-for-estimate" });
+})();
 
 /* ---------- プールの既定ペルソナ ----------
    プールは「誰でもない平均顔」を12枚並べるためのものではない。ここでも属性を
@@ -131,17 +152,19 @@ async function main() {
       console.log(`表情: ${b.variable.expression} ／ 視線: ${b.variable.gaze}`);
       console.log(`\n${b.prompt}\n`);
     }
-    const cost = estimateCost(model, size, built.length);
+    const cost = estimateCost(provider, built.length);
     console.log("═".repeat(70));
-    console.log(`${built.length}枚 × ${model} / ${size} ＝ 概算 $${cost.toFixed(2)}`);
+    console.log(`${built.length}枚 × ${provider.label} ＝ 概算 $${cost.toFixed(2)}`);
     console.log("画像モデルに無料枠はありません（課金アカウントが必要です）。");
+    console.log("単価は変動するため、正確な額は各社の料金ページで確認してください。");
     console.log("問題なければ --dry-run を外して実行してください。");
     return;
   }
 
-  if (!process.env.GEMINI_API_KEY) {
-    console.error("GEMINI_API_KEY が設定されていません。");
-    console.error('  export GEMINI_API_KEY="..." を実行してから再度お試しください。');
+  if (resolveProvider(env).name === "none") {
+    console.error("画像生成用のAPIキーが設定されていません。次のどちらかを設定してください:");
+    console.error('  export GEMINI_API_KEY="..."    # 推奨。人物ポートレートの写実性が安定して高い');
+    console.error('  export OPENAI_API_KEY="..."    # gpt-image-1 で生成');
     console.error("  プロンプトだけ確認する場合は --dry-run を付けてください。");
     process.exit(1);
   }
@@ -160,12 +183,7 @@ async function main() {
     }
     process.stdout.write(`gen   ${b.persona.id} … `);
     try {
-      const img = await generateImage({
-        prompt: b.prompt,
-        apiKey: process.env.GEMINI_API_KEY,
-        model, size, aspect: "1:1",
-        reference: anchor,
-      });
+      const img = await generate({ prompt: b.prompt, aspect: "1:1", reference: anchor }, provider);
       const ext = img.mimeType === "image/png" ? "png" : "jpg";
       const file = path.join(outDir, `${b.persona.id}.${ext}`);
       fs.writeFileSync(file, Buffer.from(img.data, "base64"));
